@@ -1,4 +1,1 @@
-"""WebSocket connection manager and live incident event streaming.
-
-Implemented in Phase 10.
-"""
+"""Live incident event streaming over WebSocket (`WS /ws/incidents/{id}`), see stream.py."""

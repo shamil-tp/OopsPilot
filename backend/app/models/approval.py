@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, utc_now_column
@@ -26,6 +26,9 @@ class Approval(Base):
     target: Mapped[str] = mapped_column(String(64))
     risk: Mapped[RiskLevel] = mapped_column(enum_column(RiskLevel))
     reason: Mapped[str] = mapped_column(Text, default="")
+    # The exact, backend-validated parameters the human approves (e.g. service, from_version,
+    # to_version). Execution uses these, never new values from a client or the model.
+    parameters: Mapped[dict[str, Any]] = mapped_column(default=dict, server_default=text("'{}'"))
     status: Mapped[ApprovalStatus] = mapped_column(
         enum_column(ApprovalStatus), default=ApprovalStatus.PENDING
     )

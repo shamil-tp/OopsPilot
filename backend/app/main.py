@@ -4,10 +4,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai.factory import close_ai_provider
+from app.api.errors import register_exception_handlers
 from app.api.router import api_router
 from app.core.config import get_settings, redact_database_url
 from app.core.logging import configure_logging, get_logger
 from app.db.session import engine
+from app.websocket.stream import router as websocket_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -26,6 +29,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         },
     )
     yield
+    await close_ai_provider()
     await engine.dispose()
     logger.info("shutdown")
 
@@ -43,4 +47,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+register_exception_handlers(app)
 app.include_router(api_router)
+# WS /ws/incidents/{id} (CLAUDE.md §21): live agent events; REST stays the source of commands.
+app.include_router(websocket_router)

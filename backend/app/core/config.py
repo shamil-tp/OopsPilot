@@ -61,13 +61,22 @@ class Settings(BaseSettings):
     database_url: str
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
 
-    # Gemini is the only provider for now. All agents will share these keys through a key pool.
-    ai_provider: Literal["gemini"] = "gemini"
-    gemini_model: str = "gemini-2.5-flash"
+    # Gemini is the only provider for now. All agents share these keys through one key pool.
+    # Validated lazily by the AI provider factory (app.ai.factory), not at startup, so the
+    # non-AI APIs keep working when AI is misconfigured.
+    ai_provider: str = "gemini"
+    gemini_model: str = "gemini-3.1-flash-lite"
     gemini_api_key_1: SecretStr | None = None
     gemini_api_key_2: SecretStr | None = None
     gemini_api_key_3: SecretStr | None = None
     gemini_api_key_4: SecretStr | None = None
+    # How long a rate-limited key is skipped (unless Gemini says how long to wait).
+    gemini_key_cooldown_seconds: float = Field(default=60, gt=0)
+
+    # Defaults for every LLM request; agents can override them per call.
+    llm_timeout_seconds: float = Field(default=30, gt=0)
+    llm_temperature: float = Field(default=0.2, ge=0, le=2)
+    llm_max_output_tokens: int = Field(default=2048, ge=1)
 
     github_webhook_secret: SecretStr | None = None
 
@@ -88,15 +97,25 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("ai_provider")
+    @classmethod
+    def _normalize_provider(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @property
+    def gemini_api_key_slots(self) -> dict[int, SecretStr]:
+        """Configured keys by their GEMINI_API_KEY_<n> number; blank or unset slots are skipped."""
+        slots = {
+            1: self.gemini_api_key_1,
+            2: self.gemini_api_key_2,
+            3: self.gemini_api_key_3,
+            4: self.gemini_api_key_4,
+        }
+        return {n: key for n, key in slots.items() if key and key.get_secret_value().strip()}
+
     @property
     def gemini_api_keys(self) -> list[SecretStr]:
-        keys = (
-            self.gemini_api_key_1,
-            self.gemini_api_key_2,
-            self.gemini_api_key_3,
-            self.gemini_api_key_4,
-        )
-        return [key for key in keys if key and key.get_secret_value().strip()]
+        return list(self.gemini_api_key_slots.values())
 
 
 @lru_cache

@@ -73,3 +73,10 @@ async def db() -> AsyncIterator[AsyncSession]:
 async def client() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+async def clean_demo(client: AsyncClient) -> None:
+    """Start from the healthy demo baseline (no incidents) on the test database."""
+    response = await client.post("/api/demo/reset")
+    assert response.status_code == 200

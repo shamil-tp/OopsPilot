@@ -2,7 +2,7 @@
 -- OpsPilot — complete database schema for Supabase PostgreSQL
 -- =============================================================================
 --
--- Equivalent to `alembic upgrade head` (migrations 0001 + 0002). Generated from
+-- Equivalent to `alembic upgrade head` (migrations 0001 + 0002 + 0003). Generated from
 -- `alembic upgrade head --sql` and annotated. The Alembic migrations in
 -- backend/alembic/versions/ remain the source of truth; regenerate this file
 -- whenever a migration is added:
@@ -12,7 +12,7 @@
 --         alembic upgrade head --sql 2>/dev/null
 --
 -- Use EITHER this script OR `alembic upgrade head` on a database, not both.
--- The script records revision 0002 in `alembic_version`, so Alembic treats the
+-- The script records revision 0003 in `alembic_version`, so Alembic treats the
 -- database as fully migrated and future migrations apply normally.
 --
 -- Safety:
@@ -169,6 +169,8 @@ CREATE TABLE public.approvals (
     status VARCHAR(32) NOT NULL,
     requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     decided_at TIMESTAMP WITH TIME ZONE,
+    -- Migration 0003: backend-validated action parameters (e.g. rollback from/to version).
+    parameters JSONB DEFAULT '{}' NOT NULL,
     CONSTRAINT pk_approvals PRIMARY KEY (id),
     CONSTRAINT fk_approvals_incident_id_incidents FOREIGN KEY (incident_id)
         REFERENCES public.incidents (id) ON DELETE CASCADE
@@ -209,7 +211,7 @@ ALTER TABLE public.incident_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY;
 
 -- Tell Alembic the schema is at the latest migration.
-INSERT INTO public.alembic_version (version_num) VALUES ('0002');
+INSERT INTO public.alembic_version (version_num) VALUES ('0003');
 
 COMMIT;
 
@@ -219,4 +221,4 @@ COMMIT;
 -- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 --   -> 9 rows (8 OpsPilot tables + alembic_version), rowsecurity = true for all
 -- SELECT version_num FROM public.alembic_version;
---   -> 0002
+--   -> 0003

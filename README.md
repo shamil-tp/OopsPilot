@@ -87,15 +87,15 @@ Next.js dashboard  ──REST + WebSocket──▶  FastAPI backend  ──SQLAl
 ├── backend/                 FastAPI + SQLAlchemy (async) + Alembic
 │   ├── app/
 │   │   ├── api/             REST routes (/api/...)
-│   │   ├── agents/          logical AI agents            (Phase 6+)
-│   │   ├── ai/              AI provider abstraction      (Phase 5)
+│   │   ├── agents/          investigation, root cause, remediation, verification agents; approval gate
+│   │   ├── ai/              AIProvider interface, Gemini provider, key pool, factory
 │   │   ├── core/            settings, structured logging
 │   │   ├── db/              engine, session, declarative base
 │   │   ├── models/          ORM models + domain enums
-│   │   ├── prompts/         agent system prompts         (Phase 6)
+│   │   ├── prompts/         concise agent prompts
 │   │   ├── schemas/         Pydantic request/response models
-│   │   ├── services/        simulated environment, business logic (Phase 3+)
-│   │   ├── tools/           allowlisted agent tools      (Phase 4)
+│   │   ├── services/        simulated environment, telemetry queries, business logic
+│   │   ├── tools/           tool registry, permissions, read-only telemetry tools
 │   │   ├── websocket/       live incident events         (Phase 10)
 │   │   └── main.py
 │   ├── alembic/             database migrations
@@ -103,7 +103,7 @@ Next.js dashboard  ──REST + WebSocket──▶  FastAPI backend  ──SQLAl
 │   └── tests/
 ├── frontend/                Next.js (App Router) + TypeScript + Tailwind + Framer Motion
 │   ├── app/  components/  hooks/  lib/  types/
-├── docs/                    architecture notes
+├── docs/                    architecture.md, agent-design.md, api.md, demo.md
 ├── .github/workflows/       backend CI, frontend CI, Docker build + smoke test
 ├── docker-compose.yml       backend + frontend (the database is Supabase)
 └── .env.example
@@ -139,7 +139,7 @@ python -m scripts.check_database
 ```
 
 Alternatively, paste [`docs/supabase-schema.sql`](docs/supabase-schema.sql) into the Supabase SQL
-Editor. It creates exactly the same schema and records revision `0002` for Alembic. Use one
+Editor. It creates exactly the same schema and records revision `0003` for Alembic. Use one
 method or the other, not both.
 
 `check_database` verifies the connection, the Alembic revision, that all 8 tables exist with RLS
@@ -176,6 +176,70 @@ docker compose run --rm backend alembic upgrade head   # only when there are new
 - Health: http://localhost:8000/api/system/health (503 with `database.status = "unavailable"`
   if Supabase can't be reached; the app never falls back to another database)
 
+## 🎬 Demo: simulated incident (backend)
+
+OpsPilot investigates a deterministic, simulated production environment (`payment-api`,
+`auth-api`, `database`) whose logs, deployments and health metrics are stored in PostgreSQL.
+
+1. Start the backend with `DATABASE_URL` pointing at Supabase (see above).
+2. `POST /api/demo/reset`: healthy environment, payment-api on v1.8.1, no incidents.
+3. `POST /api/incidents/simulate`: v1.8.2 is deployed, database connection errors and HTTP 500s
+   follow, and incident **INC-001** (HIGH, DETECTED) is created.
+4. `GET /api/incidents/1`
+5. `GET /api/services/payment-api/health`: `DEGRADED`, error rate 37%, latency 2800 ms
+6. `GET /api/services/payment-api/logs?level=ERROR&level=WARN`
+7. `GET /api/services/payment-api/deployments`
+8. `POST /api/incidents/1/investigate`: the **Investigation Agent** gathers bounded evidence
+   with read-only tools and makes one structured Gemini call; `GET /api/incidents/1/events`
+   shows its timeline. The incident moves to `INVESTIGATING`.
+9. `POST /api/incidents/1/analyze`: the **Root Cause Analysis Agent** correlates the stored
+   evidence into the most likely cause (v1.8.2's database configuration change), with cited
+   evidence, a causal chain and ruled-out alternatives. The incident moves to `ANALYZING`.
+10. `POST /api/incidents/1/remediate`: the **Remediation Agent** proposes a rollback of
+    payment-api v1.8.2 → v1.8.1; the backend validates it, sets risk MEDIUM, and creates a
+    `PENDING` approval (incident `AWAITING_APPROVAL`). Nothing is executed yet.
+11. `POST /api/incidents/1/approve` (or `/reject`): the backend re-validates and executes the
+    approved rollback (simulated): v1.8.1 active, payment-api HEALTHY (0.8%, 180 ms), incident
+    `VERIFYING`. No AI call. Rejecting escalates the incident instead.
+12. `POST /api/incidents/1/verify`: the **Verification Agent**'s backend checks confirm recovery
+    (v1.8.1 active, HEALTHY, 0.8% < 5%, 180 ms < 500 ms, fresh telemetry): incident `RESOLVED`.
+13. Observe the chain the agents inferred (it is never stated in the data):
+
+   ```text
+   deployment v1.8.2 → database connection errors → payment API 500s → degraded health
+   ```
+
+Try it in Swagger UI at http://localhost:8000/docs. Repeating **simulate** while the incident is
+active returns the same incident; **reset** makes the demo repeatable. Details:
+[`docs/demo.md`](docs/demo.md).
+
+## 🔌 API Overview
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/system/health` | App, database, and AI provider status |
+| `POST` | `/api/incidents/simulate` | Create the simulated payment-api incident (idempotent while active) |
+| `GET` | `/api/incidents` | Incidents, newest first |
+| `GET` | `/api/incidents/{id}` | Incident details (`404` if unknown) |
+| `POST` | `/api/incidents/{id}/investigate` | Run the Investigation Agent (read-only tools + 1 structured AI call) |
+| `GET` | `/api/incidents/{id}/events` | Agent timeline, oldest first |
+| `POST` | `/api/incidents/{id}/analyze` | Run the Root Cause Analysis Agent on the stored investigation (1 structured AI call) |
+| `GET` | `/api/incidents/{id}/analysis` | Latest root cause analysis |
+| `POST` | `/api/incidents/{id}/remediate` | Run the Remediation Agent: validated proposal + PENDING approval (no execution) |
+| `GET` | `/api/incidents/{id}/remediation` | Latest remediation proposal and approval |
+| `POST` | `/api/incidents/{id}/approve` | Approve the pending proposal; backend executes it (simulated) |
+| `POST` | `/api/incidents/{id}/reject` | Reject the pending proposal; incident escalated |
+| `GET` | `/api/incidents/{id}/execution` | Execution of the approved remediation |
+| `POST` | `/api/incidents/{id}/verify` | Run the Verification Agent: backend recovery checks → RESOLVED or FAILED |
+| `GET` | `/api/incidents/{id}/verification` | Latest verification result |
+| `GET` | `/api/services` | Simulated services and their current status |
+| `GET` | `/api/services/{name}/health` | Latest health snapshot |
+| `GET` | `/api/services/{name}/logs` | Logs, chronological; filter by `level`, `since`, `until`, `limit` |
+| `GET` | `/api/services/{name}/deployments` | Deployment history, newest first |
+| `POST` | `/api/demo/reset` | Reset to a healthy environment with no incidents |
+
+Full reference: [`docs/api.md`](docs/api.md) and the OpenAPI docs at `/docs`.
+
 ## ⚙️ Environment Variables
 
 All configuration comes from environment variables; see [`.env.example`](.env.example) for the full list.
@@ -186,6 +250,8 @@ All configuration comes from environment variables; see [`.env.example`](.env.ex
 | `TEST_DATABASE_URL` | Separate database for the test suite (defaults to local SQLite) |
 | `GEMINI_API_KEY_1` … `GEMINI_API_KEY_4` | Gemini keys shared by all agents through a key pool (never logged) |
 | `GEMINI_MODEL` | Gemini model used by the agents |
+| `GEMINI_KEY_COOLDOWN_SECONDS` | How long a rate-limited key is skipped (default 60; Gemini's own retry delay wins when given) |
+| `LLM_TIMEOUT_SECONDS`, `LLM_TEMPERATURE`, `LLM_MAX_OUTPUT_TOKENS` | Defaults for every LLM request (30 / 0.2 / 2048); agents can override per call |
 | `AI_PROVIDER` | `gemini` (Ollama + Qwen is planned, not implemented) |
 | `MAX_AGENT_STEPS`, `LLM_MAX_RETRIES`, `TOOL_MAX_RETRIES` | Agent loop safety limits (8 / 2 / 2) |
 | `GITHUB_WEBHOOK_SECRET` | Optional; validates GitHub webhook signatures |
@@ -197,10 +263,29 @@ gets `NEXT_PUBLIC_API_URL`.
 
 ### Gemini
 
-Create API keys in [Google AI Studio](https://aistudio.google.com/apikey) and set
-`GEMINI_API_KEY_1`–`4`. Unset keys are skipped; `/api/system/health` reports how many are
-configured. All agents will share these keys through one pool (round-robin, cooldown on
-rate-limit errors, fallback to the next key); no agent is bound to a specific key.
+Create API keys in [Google AI Studio](https://aistudio.google.com/apikey) and set any of
+`GEMINI_API_KEY_1`–`4` (at least one for AI features; the rest of the API works without any).
+`/api/system/health` reports how many are configured. The SDK is
+[`google-genai`](https://pypi.org/project/google-genai/).
+
+All agents share one provider (`app.ai.factory.get_ai_provider()`) and one key pool:
+
+- **Round-robin** over the configured keys; keys are logged only as `gemini-key-<n>`.
+- **Fallback:** a retryable failure (429 rate limit/quota, invalid key, 5xx, timeout, network)
+  moves to the next available key; at most `1 + LLM_MAX_RETRIES` attempts per request.
+- **Cooldown:** a rate-limited key is skipped for Gemini's suggested delay or
+  `GEMINI_KEY_COOLDOWN_SECONDS`; a rejected key for 15 minutes. Never permanently.
+- **No retry** for malformed requests (400) or an unknown model (404): they fail immediately
+  with a clear `AIProviderError` / `AIConfigurationError`.
+- **Structured output:** `generate_structured(prompt, PydanticModel)` requests JSON with the
+  model's JSON schema and returns a validated instance, or raises `AIStructuredOutputError`.
+
+The default model is **`gemini-3.1-flash-lite`**: a pinned version (it never changes
+underneath the demo), verified live for text and structured output with the team's free-tier
+keys, and cheap (no hidden thinking tokens). Alternatives seen during Phase 4: `gemini-2.5-flash`
+returns *404: no longer available to new users* for these keys; `gemini-flash-latest` and
+`gemini-3.8-flash` work but often return *503 high demand*. If root-cause reasoning needs a
+stronger model later, change `GEMINI_MODEL` only; no code changes.
 
 ## 🧪 Testing
 
@@ -232,4 +317,11 @@ service container.
 
 - [x] **Phase 1** — monorepo, FastAPI + Next.js skeletons, Docker Compose, CI
 - [x] **Phase 2** — database models and migrations, hosted on Supabase PostgreSQL
-- [ ] Phase 3+ — simulated payment service, tools, Gemini provider, agents, approval flow, WebSocket events, dashboard
+- [x] **Phase 3** — simulated incident environment: services, deployments, logs, health, incident + demo reset APIs
+- [x] **Phase 4** — AI provider interface, Gemini provider (text + structured output), multi-key pool with round-robin, cooldown and fallback
+- [x] **Phase 5** — Investigation Agent: read-only tools with permission enforcement, deterministic evidence collection, one structured Gemini call, stored runs/events, investigate + events APIs
+- [x] **Phase 6** — Root Cause Analysis Agent: correlates the stored investigation (timeline, dependencies, alternatives) into a cited, validated root cause; analyze + analysis APIs
+- [x] **Phase 7** — Remediation Agent: proposes a supported action; backend policy validates target/version/citations, sets risk and approval, creates a PENDING approval (no execution)
+- [x] **Phase 8** — Human approval gate (approve/reject, no request body) and deterministic simulated execution of the stored, re-validated proposal; incident → VERIFYING
+- [x] **Phase 9** — Verification Agent: six deterministic backend recovery checks decide RESOLVED/FAILED; one AI call explains with validated citations
+- [ ] **Phase 10** — Incident report & real-time dashboard integration (next)

@@ -1,4 +1,4 @@
-"""Concise system prompts for the logical agents.
+"""Concise system prompts for the logical agents (investigation: Phase 5).
 
-Owner: AI/Agents. Implemented in Phase 6.
+Owner: AI/Agents.
 """

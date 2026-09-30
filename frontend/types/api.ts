@@ -36,3 +36,365 @@ export interface SystemHealth {
   database: DatabaseHealth;
   ai: AIProviderHealth;
 }
+
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+
+export type DeploymentStatus = "IN_PROGRESS" | "SUCCEEDED" | "FAILED" | "ROLLED_BACK";
+
+// Timestamps are ISO 8601 strings in UTC (with a trailing "Z").
+
+export interface Incident {
+  id: number;
+  reference: string; // e.g. "INC-001"
+  title: string;
+  description: string;
+  severity: Severity;
+  status: IncidentStatus;
+  service_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceSummary {
+  name: string;
+  display_name: string;
+  description: string;
+  dependencies: string[];
+  status: ServiceStatus | null;
+  last_health_at: string | null;
+}
+
+export interface ServiceHealth {
+  service_name: string;
+  timestamp: string;
+  status: ServiceStatus;
+  error_rate: number; // percent
+  latency_ms: number;
+  cpu_usage: number; // percent
+  memory_usage: number; // percent
+}
+
+export interface LogEntry {
+  timestamp: string;
+  service_name: string;
+  level: LogLevel;
+  message: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface Deployment {
+  service_name: string;
+  version: string;
+  status: DeploymentStatus;
+  timestamp: string;
+  commit_sha: string | null;
+}
+
+export interface DemoResetResponse {
+  status: "reset";
+  message: string;
+  incidents_deleted: number;
+  logs_deleted: number;
+  deployments_deleted: number;
+  health_records_deleted: number;
+}
+
+/** Body of every error response (FastAPI's `{"detail": ...}`). */
+export interface ApiErrorBody {
+  detail: string;
+}
+
+// --- Agents (Phases 5-9) -----------------------------------------------------------------------
+
+export type AgentName = "orchestrator" | "investigation" | "root_cause" | "remediation" | "verification";
+export type AgentRunStatus = "RUNNING" | "COMPLETED" | "FAILED";
+export type ActionType = "ROLLBACK_DEPLOYMENT" | "RESTART_SERVICE" | "NO_ACTION" | "ESCALATE_TO_HUMAN";
+export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+export type RecoveryStatus = "RECOVERED" | "NOT_RECOVERED" | "NOT_ATTEMPTED";
+export type EvidenceSource = "logs" | "health" | "deployments" | "previous_incidents" | "execution";
+
+export interface AgentEvent {
+  id: number;
+  incident_id: number;
+  agent: AgentName | null;
+  event_type: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface EvidenceItem {
+  id: string; // citation id: L1, H1, D1, P1, V1 ...
+  source: EvidenceSource;
+  service: string;
+  timestamp: string | null;
+  fact: string;
+  data: Record<string, unknown>;
+}
+
+export interface PreviousIncident {
+  reference: string;
+  title: string;
+  severity: Severity;
+  status: IncidentStatus;
+  created_at: string;
+  root_cause: string | null;
+}
+
+export interface InvestigationFinding {
+  kind: "observation" | "hypothesis";
+  statement: string;
+  evidence_ids: string[];
+}
+
+export interface InvestigationResult {
+  incident_id: number;
+  incident_reference: string;
+  service: string;
+  status: "investigation_complete";
+  summary: string;
+  findings: InvestigationFinding[];
+  evidence: EvidenceItem[];
+  related_deployments: Deployment[];
+  related_previous_incidents: PreviousIncident[];
+  confidence: number;
+  next_step: "root_cause_analysis" | "collect_more_evidence";
+  model: string;
+}
+
+/** Common shape of every agent run endpoint (`result` differs per agent). */
+export interface AgentRunView<TResult> {
+  run_id: number;
+  incident_id: number;
+  incident_reference: string;
+  incident_status: IncidentStatus;
+  agent: AgentName;
+  status: AgentRunStatus;
+  started_at: string;
+  completed_at: string | null;
+  summary: string | null;
+  result: TResult | null;
+}
+
+export type InvestigationRun = AgentRunView<InvestigationResult>;
+
+export type RootCauseCategory =
+  | "deployment_regression"
+  | "configuration_error"
+  | "database_failure"
+  | "network_connectivity"
+  | "resource_exhaustion"
+  | "external_dependency"
+  | "transient"
+  | "unknown";
+
+export interface CitedStatement {
+  statement: string;
+  evidence_ids: string[];
+}
+
+export interface AlternativeExplanation {
+  explanation: string;
+  assessment: "less_likely" | "ruled_out" | "not_assessable";
+  reason: string;
+  evidence_ids: string[];
+}
+
+export interface RootCauseResult {
+  incident_id: number;
+  incident_reference: string;
+  service: string;
+  status: "root_cause_identified";
+  root_cause: string;
+  category: RootCauseCategory;
+  confidence: number;
+  supporting_evidence: EvidenceItem[];
+  causal_chain: CitedStatement[];
+  contributing_factors: CitedStatement[];
+  alternative_explanations: AlternativeExplanation[];
+  missing_evidence: string[];
+  reasoning_summary: string;
+  recommended_next_step: "propose_remediation" | "collect_more_evidence" | "escalate_to_human";
+  investigation_run_id: number;
+  model: string;
+}
+
+export type RootCauseRun = AgentRunView<RootCauseResult>;
+
+export interface Approval {
+  id: number;
+  incident_id: number;
+  action_type: ActionType;
+  target: string;
+  risk: RiskLevel;
+  reason: string;
+  parameters: Record<string, unknown>;
+  status: ApprovalStatus;
+  requested_at: string;
+  decided_at: string | null;
+}
+
+export interface RemediationResult {
+  incident_id: number;
+  incident_reference: string;
+  service: string;
+  status: "approval_required" | "no_action" | "escalated";
+  action: ActionType;
+  target: string;
+  parameters: Record<string, unknown>;
+  reason: string;
+  risk: RiskLevel;
+  requires_approval: boolean;
+  approval_id: number | null;
+  supporting_evidence: EvidenceItem[];
+  confidence: number;
+  executed: false;
+  root_cause_run_id: number;
+  model: string;
+}
+
+export interface RemediationRun extends AgentRunView<RemediationResult> {
+  approval: Approval | null;
+}
+
+export interface ServiceSnapshot {
+  active_version: string | null;
+  status: ServiceStatus | null;
+  error_rate: number | null;
+  latency_ms: number | null;
+}
+
+export interface ExecutionResult {
+  incident_id: number;
+  approval_id: number;
+  remediation_run_id: number | null;
+  action: ActionType;
+  target: string;
+  parameters: Record<string, unknown>;
+  status: "executed";
+  simulated: true;
+  service: string;
+  before: ServiceSnapshot;
+  after: ServiceSnapshot;
+  executed_at: string;
+  next_step: "verification";
+}
+
+export interface ExecutionRun {
+  run_id: number;
+  status: AgentRunStatus;
+  started_at: string;
+  completed_at: string | null;
+  summary: string | null;
+  result: ExecutionResult | null;
+}
+
+export interface DecisionResponse {
+  incident_id: number;
+  incident_reference: string;
+  incident_status: IncidentStatus;
+  approval: Approval;
+  execution: ExecutionRun | null;
+}
+
+export type RecoveryCheckName =
+  | "remediation_executed"
+  | "target_deployment_active"
+  | "service_healthy"
+  | "error_rate_recovered"
+  | "latency_recovered"
+  | "telemetry_fresh";
+
+export interface RecoveryCheck {
+  name: RecoveryCheckName;
+  passed: boolean;
+  expected: string;
+  actual: string;
+  evidence_ids: string[];
+}
+
+export interface VerificationResult {
+  incident_id: number;
+  incident_reference: string;
+  service: string;
+  status: "verification_complete";
+  recovered: boolean;
+  confidence: number;
+  before: ServiceSnapshot;
+  after: ServiceSnapshot;
+  checks: RecoveryCheck[];
+  failed_checks: RecoveryCheckName[];
+  supporting_evidence: EvidenceItem[];
+  reasoning_summary: string;
+  next_step: "incident_report" | "human_investigation";
+  execution_run_id: number;
+  approval_id: number;
+  model: string;
+}
+
+export type VerificationRun = AgentRunView<VerificationResult>;
+
+// --- Final report (Phase 10) -------------------------------------------------------------------
+
+export interface TimelineEntry {
+  timestamp: string;
+  agent: AgentName | null;
+  event_type: string;
+  message: string;
+}
+
+export interface IncidentReportContent {
+  summary: {
+    incident_id: number;
+    reference: string;
+    title: string;
+    description: string;
+    service: string;
+    severity: Severity;
+    final_status: IncidentStatus;
+    created_at: string;
+    resolved_at: string | null;
+  };
+  timeline: TimelineEntry[];
+  investigation: InvestigationResult;
+  root_cause: RootCauseResult;
+  remediation: RemediationResult;
+  approval: Approval;
+  execution: ExecutionResult;
+  verification: VerificationResult;
+  outcome: {
+    recovered: boolean;
+    final_status: IncidentStatus;
+    human_decision: "APPROVED" | "REJECTED" | "PENDING" | "NONE";
+    remediation_performed: string | null;
+    verification: string;
+    recovery_status: RecoveryStatus;
+  };
+}
+
+export interface IncidentReport {
+  report_id: number;
+  incident_id: number;
+  created_at: string;
+  report: IncidentReportContent;
+}
+
+// --- Live stream: WS /ws/incidents/{id} --------------------------------------------------------
+
+export interface StreamEventMessage extends AgentEvent {
+  type: string; // equals event_type
+}
+
+export interface StreamStatusMessage {
+  type: "incident_status";
+  incident_id: number;
+  incident_status: IncidentStatus;
+}
+
+export interface StreamErrorMessage {
+  type: "error";
+  message: string;
+}
+
+export type StreamMessage = StreamEventMessage | StreamStatusMessage | StreamErrorMessage;
