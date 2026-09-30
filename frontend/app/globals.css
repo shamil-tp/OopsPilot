@@ -1,17 +1,46 @@
 @import "tailwindcss";
 
+/*
+ * Neutral, light engineering-tool palette. Color is reserved for meaning:
+ * green = healthy/resolved, amber = needs attention/approval, red = failing, blue = in progress.
+ */
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-canvas: #f7f7f5;
+  --color-panel: #ffffff;
+  --color-ink: #18181b;
+  --color-muted: #71717a;
+  --color-subtle: #a1a1aa;
+  --color-line: #e4e4e7;
+  --color-line-strong: #d4d4d8;
+  --color-hover: #f4f4f2;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgb(34 211 238 / 0.08), transparent),
-    var(--color-slate-950);
-  color: var(--color-slate-100);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* One visible, consistent keyboard focus style for every interactive element. */
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

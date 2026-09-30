@@ -3,99 +3,64 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 
-import { Badge, Card, Empty } from "@/components/ui";
+import { Button, Dot, Empty, type Tone } from "@/components/ui";
 import { label, time } from "@/lib/format";
 import type { AgentEvent } from "@/types/api";
-import type { LiveMode } from "@/hooks/useIncidentConsole";
 
-// Fine-grained events, hidden unless "show all" is on.
+// Fine-grained events, hidden unless "All events" is selected.
 const DETAIL = new Set(["tool_started", "tool_completed", "recovery_check"]);
 
-const ICON: Record<string, string> = {
-  incident_created: "🚨",
-  cicd_event_recorded: "⎇",
-  deployment_detected: "🚀",
-  agent_started: "▶",
-  evidence_found: "🔎",
-  investigation_completed: "✓",
-  root_cause_identified: "🎯",
-  remediation_recommended: "🛠",
-  approval_required: "⚠",
-  approval_received: "👤",
-  remediation_started: "⏳",
-  remediation_completed: "✓",
-  verification_started: "🩺",
-  verification_completed: "✓",
-  incident_resolved: "✅",
-  incident_escalated: "⤴",
-  report_generated: "📄",
-  error: "✖",
+const TONE: Record<string, Tone> = {
+  incident_created: "critical",
+  error: "critical",
+  approval_required: "warn",
+  incident_escalated: "warn",
+  incident_resolved: "ok",
 };
 
-const MODE: Record<LiveMode, { text: string; tone: "emerald" | "amber" | "slate" }> = {
-  live: { text: "Live", tone: "emerald" },
-  polling: { text: "Polling", tone: "amber" },
-  connecting: { text: "Connecting", tone: "slate" },
-};
+function actor(event: AgentEvent): string {
+  if (event.metadata.source === "github") return "GitHub";
+  return event.agent ? label(event.agent) : "System";
+}
 
-export function EventTimeline({ events, mode }: { events: AgentEvent[]; mode: LiveMode }) {
+export function EventTimeline({ events }: { events: AgentEvent[] }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? events : events.filter((e) => !DETAIL.has(e.event_type));
 
   return (
-    <Card
-      eyebrow="Agent activity"
-      title="Investigation timeline"
-      actions={
-        <div className="flex items-center gap-2">
-          <Badge tone={MODE[mode].tone}>● {MODE[mode].text}</Badge>
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="rounded-md border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 hover:border-slate-500 hover:text-slate-200"
-          >
-            {showAll ? "Milestones" : "Show all"}
-          </button>
-        </div>
-      }
-    >
+    <div>
+      <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-line pb-2">
+        <h2 className="text-[15px] font-semibold text-ink">Timeline</h2>
+        <Button variant="quiet" className="px-0 py-0 text-xs" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)}>
+          {showAll ? "Milestones only" : `All events (${events.length})`}
+        </Button>
+      </div>
       {visible.length === 0 ? (
         <Empty>No events yet.</Empty>
       ) : (
-        <ol className="relative max-h-[34rem] space-y-3 overflow-y-auto pr-1">
+        <ol aria-live="polite" className="max-h-80 overflow-y-auto pr-1 lg:max-h-[calc(100vh-9rem)]">
           <AnimatePresence initial={false}>
-            {visible.map((event) => (
+            {visible.map((event, i) => (
               <motion.li
                 key={event.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.25 }}
-                className="flex gap-3"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2 }}
+                className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-x-3"
               >
-                <span
-                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${
-                    event.event_type === "error"
-                      ? "border-rose-500/50 bg-rose-500/10"
-                      : event.event_type === "approval_required"
-                        ? "border-amber-400/50 bg-amber-400/10"
-                        : "border-slate-700 bg-slate-800"
-                  }`}
-                >
-                  {ICON[event.event_type] ?? "·"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
-                    <span className="font-mono">{time(event.timestamp)}</span>
-                    <span>{event.agent ? label(event.agent) : "System"}</span>
-                    <span className="font-mono text-slate-600">{event.event_type}</span>
-                  </div>
-                  <p className="text-sm break-words text-slate-200">{event.message}</p>
+                <time dateTime={event.timestamp} className="pt-px font-mono text-xs text-muted">
+                  {time(event.timestamp)}
+                </time>
+                <div className={`relative border-l pl-4 ${i === visible.length - 1 ? "border-transparent pb-0" : "border-line pb-4"}`}>
+                  <Dot tone={TONE[event.event_type] ?? "neutral"} className="absolute top-1.5 -left-[4.5px] ring-2 ring-canvas" />
+                  <p className="text-sm leading-snug break-words text-ink">{event.message}</p>
+                  <p className="mt-0.5 text-xs text-muted">{actor(event)}</p>
                 </div>
               </motion.li>
             ))}
           </AnimatePresence>
         </ol>
       )}
-    </Card>
+    </div>
   );
 }

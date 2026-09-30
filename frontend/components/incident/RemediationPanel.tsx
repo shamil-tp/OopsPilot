@@ -1,21 +1,37 @@
 "use client";
 
-import { motion } from "framer-motion";
-
 import { SnapshotCompare } from "@/components/incident/SnapshotCompare";
-import { Badge, Card, Empty, ErrorNote, EvidenceRefs, evidenceIndex, RiskBadge } from "@/components/ui";
+import {
+  Button,
+  Empty,
+  ErrorNote,
+  EvidenceRefs,
+  evidenceIndex,
+  Indicator,
+  RiskLabel,
+  Section,
+  Subheading,
+  type Tone,
+} from "@/components/ui";
 import { dateTime, describeAction, label, percent, str } from "@/lib/format";
-import type { EvidenceItem, ExecutionRun, IncidentStatus, RemediationRun } from "@/types/api";
+import type { ActionType, ApprovalStatus, EvidenceItem, ExecutionRun, IncidentStatus, RemediationRun } from "@/types/api";
 
 type Decision = "approve" | "reject";
 
-// Display names for the backend-stored approval parameters (read-only; never editable here).
-const PARAM_LABEL: Record<string, string> = {
-  service: "Affected service",
-  from_version: "Current version",
-  to_version: "Target version",
+const APPROVAL_TONE: Record<ApprovalStatus, Tone> = { PENDING: "warn", APPROVED: "ok", REJECTED: "critical", EXPIRED: "neutral" };
+const APPROVE_LABEL: Partial<Record<ActionType, string>> = {
+  ROLLBACK_DEPLOYMENT: "Approve rollback",
+  RESTART_SERVICE: "Approve restart",
 };
-const PARAM_ORDER = Object.keys(PARAM_LABEL);
+
+function Field({ term, children }: { term: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted">{term}</dt>
+      <dd className="mt-0.5 text-sm text-ink">{children}</dd>
+    </div>
+  );
+}
 
 export function RemediationPanel({
   run,
@@ -37,89 +53,91 @@ export function RemediationPanel({
   const result = run?.result;
   if (!run || !result) {
     return (
-      <Card eyebrow="Remediation agent" title="Recommended action">
-        <Empty>{run?.status === "FAILED" ? run.summary : "No remediation proposed yet."}</Empty>
-      </Card>
+      <Section id="remediation" title="Remediation">
+        <Empty>
+          {run?.status === "FAILED"
+            ? run.summary
+            : run?.status === "RUNNING"
+              ? "Choosing a safe action…"
+              : "Proposed after root cause analysis. Risky actions wait for human approval."}
+        </Empty>
+      </Section>
     );
   }
   const approval = run.approval;
   const sentence = describeAction(result.action, result.parameters, result.target);
   const index = evidenceIndex(evidence, result.supporting_evidence);
   const pending = approval?.status === "PENDING" && incidentStatus === "AWAITING_APPROVAL";
+  const params = approval?.parameters ?? result.parameters;
+  const service = str(params.service ?? result.target);
 
   return (
-    <Card
-      eyebrow="Remediation agent"
-      title="Recommended action"
-      actions={
-        <div className="flex gap-1.5">
-          <RiskBadge risk={result.risk} />
-          {result.requires_approval && <Badge tone="amber">Human approval required</Badge>}
-        </div>
-      }
-    >
-      <p className="mb-1 font-mono text-lg text-slate-50">{sentence}</p>
-      <p className="mb-3 text-xs text-slate-500">
-        {label(result.action)} · target {result.target} · confidence {percent(result.confidence)} · risk and
-        approval set by backend policy
+    <Section id="remediation" title="Remediation" aside="Risk and approval are set by backend policy">
+      <p className="text-base font-medium text-ink">{sentence}</p>
+      <p className="mt-1 text-xs text-muted">
+        {label(result.action)} · risk <RiskLabel risk={result.risk} /> ·{" "}
+        {result.requires_approval ? "human approval required" : "no approval needed"} · confidence{" "}
+        {percent(result.confidence)}
       </p>
-      <p className="mb-3 text-sm text-slate-300">
+      <p className="mt-2 max-w-3xl text-sm text-ink">
         {result.reason} <EvidenceRefs ids={result.supporting_evidence.map((e) => e.id)} evidence={index} />
       </p>
 
       {approval && (
-        <motion.div
-          layout
-          className={`mb-4 rounded-lg border p-4 ${
-            pending ? "border-amber-400/40 bg-amber-400/5" : "border-slate-800 bg-slate-950/50"
-          }`}
+        <div
+          className={`mt-5 rounded-md border bg-panel p-4 sm:p-5 ${pending ? "border-amber-400 border-l-4" : "border-line"}`}
+          aria-labelledby="approval-title"
         >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold tracking-widest text-slate-400 uppercase">Human approval</p>
-            <Badge
-              tone={approval.status === "APPROVED" ? "emerald" : approval.status === "REJECTED" ? "rose" : "amber"}
-            >
-              {approval.status}
-            </Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="approval-title" className="text-sm font-semibold text-ink">
+              Remediation approval
+            </h3>
+            <Indicator tone={APPROVAL_TONE[approval.status]}>
+              {approval.status === "PENDING" ? "Waiting for approval" : label(approval.status)}
+            </Indicator>
           </div>
-          <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs text-slate-300">
-            {Object.entries(approval.parameters)
-              .filter(([key]) => key !== "remediation_run_id")
-              .sort(([a], [b]) => PARAM_ORDER.indexOf(a) - PARAM_ORDER.indexOf(b))
-              .map(([key, value]) => (
-                <div key={key} className="contents">
-                  <dt className="text-slate-500">{PARAM_LABEL[key] ?? key}</dt>
-                  <dd>{str(value)}</dd>
-                </div>
-              ))}
+
+          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-5">
+            <Field term="Action">{label(approval.action_type)}</Field>
+            <Field term="Service">
+              <span className="font-mono">{service}</span>
+            </Field>
+            {"from_version" in params && (
+              <Field term="Current version">
+                <span className="font-mono">{str(params.from_version)}</span>
+              </Field>
+            )}
+            {"to_version" in params && (
+              <Field term="Target version">
+                <span className="font-mono">{str(params.to_version)}</span>
+              </Field>
+            )}
+            <Field term="Risk">
+              <RiskLabel risk={approval.risk} />
+            </Field>
           </dl>
+
           {pending ? (
             <>
-              <p className="mb-3 text-sm text-amber-200">
-                Approve <span className="font-semibold">{sentence}</span>? The backend executes exactly these
-                stored parameters.
+              <p className="mt-4 text-sm text-ink">
+                {result.action === "ROLLBACK_DEPLOYMENT"
+                  ? `This action will modify the active deployment of ${service}.`
+                  : `This action will change ${service}.`}{" "}
+                <span className="text-muted">
+                  The backend executes exactly these stored parameters; they cannot be edited here.
+                </span>
               </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => onDecide("approve")}
-                  className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {busy === "approve" ? "Approving & executing…" : "Approve"}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => onDecide("reject")}
-                  className="rounded-md border border-rose-500/50 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+                <Button disabled={busy !== null} onClick={() => onDecide("reject")}>
                   {busy === "reject" ? "Rejecting…" : "Reject"}
-                </button>
+                </Button>
+                <Button variant="primary" disabled={busy !== null} onClick={() => onDecide("approve")}>
+                  {busy === "approve" ? "Approving and executing…" : (APPROVE_LABEL[result.action] ?? "Approve")}
+                </Button>
               </div>
             </>
           ) : (
-            <p className="text-xs text-slate-500">
+            <p className="mt-4 text-xs text-muted">
               Requested {dateTime(approval.requested_at)}
               {approval.decided_at && ` · decided ${dateTime(approval.decided_at)}`}
             </p>
@@ -129,29 +147,23 @@ export function RemediationPanel({
               <ErrorNote>{error}</ErrorNote>
             </div>
           )}
-        </motion.div>
+        </div>
       )}
 
       {execution && (
-        <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold tracking-widest text-slate-400 uppercase">Execution</p>
-            <Badge tone={execution.status === "COMPLETED" ? "emerald" : execution.status === "FAILED" ? "rose" : "cyan"}>
-              {execution.status}
-            </Badge>
-          </div>
-          {execution.result ? (
-            <>
-              <p className="mb-2 text-sm text-slate-300">
-                {execution.summary} <span className="text-slate-500">(simulated)</span>
-              </p>
-              <SnapshotCompare before={execution.result.before} after={execution.result.after} />
-            </>
-          ) : (
-            <p className="text-sm text-slate-400">{execution.summary ?? "Executing…"}</p>
-          )}
-        </div>
+        <>
+          <Subheading>Execution</Subheading>
+          <p className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink">
+            <Indicator tone={execution.status === "COMPLETED" ? "ok" : execution.status === "FAILED" ? "critical" : "info"}>
+              {label(execution.status)}
+            </Indicator>
+            <span>
+              {execution.summary ?? "Executing…"} <span className="text-muted">(simulated)</span>
+            </span>
+          </p>
+          {execution.result && <SnapshotCompare before={execution.result.before} after={execution.result.after} />}
+        </>
       )}
-    </Card>
+    </Section>
   );
 }

@@ -1,0 +1,107 @@
+import type { ReactNode } from "react";
+
+import { Indicator, table, type Tone } from "@/components/ui";
+import { label, time } from "@/lib/format";
+import type { CicdEvent } from "@/types/api";
+
+export function cicdOutcome(event: CicdEvent): { text: string; tone: Tone } {
+  if (event.event_type === "push") return { text: event.metadata.tag ? "Tagged" : "Pushed", tone: "neutral" };
+  switch (event.conclusion) {
+    case "SUCCESS":
+      return { text: "Success", tone: "ok" };
+    case "FAILURE":
+    case "TIMED_OUT":
+      return { text: label(event.conclusion), tone: "critical" };
+    case "CANCELLED":
+      return { text: "Cancelled", tone: "warn" };
+    case null:
+      return { text: label(event.status), tone: "info" };
+    default:
+      return { text: label(event.conclusion), tone: "neutral" };
+  }
+}
+
+/** One-line title of an event, e.g. "deploy-production #57" or "push to main". */
+export function cicdTitle(event: CicdEvent): string {
+  if (event.event_type === "push") {
+    const tag = event.metadata.tag;
+    return typeof tag === "string" ? `tag ${tag}` : `push to ${event.branch ?? "unknown ref"}`;
+  }
+  if (event.event_type === "workflow_run") {
+    return `${event.workflow_name ?? "workflow"}${event.run_number ? ` #${event.run_number}` : ""}`;
+  }
+  return `deployment to ${event.environment ?? "unknown"}`;
+}
+
+/** Extra, non-CI/CD rows (e.g. "first error") interleaved by time. */
+export interface ContextRow {
+  key: string;
+  at: string;
+  tone: Tone;
+  text: ReactNode;
+  cite?: ReactNode;
+}
+
+type Row = { at: string; event: CicdEvent; cite?: ReactNode } | ContextRow;
+
+export function CicdTable({
+  events,
+  context = [],
+  cite,
+}: {
+  events: CicdEvent[];
+  context?: ContextRow[];
+  cite?: (event: CicdEvent) => ReactNode;
+}) {
+  const rows: Row[] = [
+    ...events.map((event) => ({ at: event.occurred_at, event, cite: cite?.(event) })),
+    ...context,
+  ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+  return (
+    <div className={table.wrap}>
+      <table className={table.table}>
+        <thead>
+          <tr>
+            <th scope="col" className={table.th}>Time (UTC)</th>
+            <th scope="col" className={table.th}>Event</th>
+            <th scope="col" className={table.th}>Result</th>
+            <th scope="col" className={`${table.th} hidden sm:table-cell`}>Version</th>
+            <th scope="col" className={`${table.th} hidden md:table-cell`}>Commit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) =>
+            "event" in row ? (
+              <tr key={`cicd-${row.event.id}`}>
+                <td className={`${table.td} ${table.mono} whitespace-nowrap text-muted`}>{time(row.event.occurred_at)}</td>
+                <td className={table.td}>
+                  <span className="font-medium text-ink">{cicdTitle(row.event)}</span>{" "}
+                  {row.cite}
+                  {row.event.commit_message && (
+                    <span className="block max-w-md truncate text-xs text-muted">{row.event.commit_message}</span>
+                  )}
+                </td>
+                <td className={table.td}>
+                  <Indicator tone={cicdOutcome(row.event).tone}>{cicdOutcome(row.event).text}</Indicator>
+                  {row.event.deployment_id !== null && <span className="block text-xs text-muted">recorded as deployment</span>}
+                </td>
+                <td className={`${table.td} ${table.mono} hidden sm:table-cell`}>{row.event.version ?? "—"}</td>
+                <td className={`${table.td} ${table.mono} hidden text-muted md:table-cell`}>
+                  {row.event.commit_sha?.slice(0, 7) ?? "—"}
+                </td>
+              </tr>
+            ) : (
+              <tr key={row.key}>
+                <td className={`${table.td} ${table.mono} whitespace-nowrap text-muted`}>{time(row.at)}</td>
+                <td className={table.td} colSpan={4}>
+                  <Indicator tone={row.tone}>{row.text}</Indicator> {row.cite}
+                </td>
+              </tr>
+            ),
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}

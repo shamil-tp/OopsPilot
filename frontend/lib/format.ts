@@ -37,6 +37,22 @@ export function dateTime(iso: string | null | undefined): string {
   return `${new Date(iso).toLocaleString("en-GB", { ...TIME, month: "short", day: "numeric" })} UTC`;
 }
 
+/** Compact table date, e.g. "30 Sept 19:30". */
+export function shortDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-GB", { ...TIME, second: undefined, month: "short", day: "numeric" });
+}
+
+/** Elapsed time between two timestamps, e.g. "1 min 03 s" or "42 s". */
+export function duration(fromIso: string | null | undefined, toIso: string | null | undefined): string {
+  if (!fromIso || !toIso) return "—";
+  const seconds = Math.max(0, Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ${String(seconds % 60).padStart(2, "0")} s`;
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
+}
+
 export function percent(value: number | null | undefined, digits = 0): string {
   return value === null || value === undefined ? "—" : `${(value * 100).toFixed(digits)}%`;
 }

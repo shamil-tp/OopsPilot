@@ -1,118 +1,205 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 import { label } from "@/lib/format";
 import type { EvidenceItem, IncidentStatus, RiskLevel, ServiceStatus, Severity } from "@/types/api";
 
-type Tone = "cyan" | "emerald" | "amber" | "rose" | "violet" | "slate" | "sky";
+/** Semantic tones. Color always accompanies text, never replaces it. */
+export type Tone = "ok" | "warn" | "critical" | "info" | "neutral";
 
-const TONES: Record<Tone, string> = {
-  cyan: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
-  emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  amber: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-  rose: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-  violet: "border-violet-400/30 bg-violet-400/10 text-violet-300",
-  sky: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-  slate: "border-slate-600 bg-slate-800/60 text-slate-300",
+const DOT: Record<Tone, string> = {
+  ok: "bg-emerald-600",
+  warn: "bg-amber-500",
+  critical: "bg-red-600",
+  info: "bg-blue-600",
+  neutral: "bg-zinc-400",
 };
 
-export function Badge({ tone = "slate", children }: { tone?: Tone; children: ReactNode }) {
+export const TEXT: Record<Tone, string> = {
+  ok: "text-emerald-700",
+  warn: "text-amber-700",
+  critical: "text-red-700",
+  info: "text-blue-700",
+  neutral: "text-muted",
+};
+
+export function Dot({ tone, className = "" }: { tone: Tone; className?: string }) {
+  return <span aria-hidden className={`inline-block h-2 w-2 shrink-0 rounded-full ${DOT[tone]} ${className}`} />;
+}
+
+/** Dot + text, e.g. "● Investigating". */
+export function Indicator({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium tracking-wide uppercase ${TONES[tone]}`}
-    >
-      {children}
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <Dot tone={tone} />
+      <span className={tone === "neutral" ? "text-ink" : TEXT[tone]}>{children}</span>
     </span>
   );
 }
 
-const STATUS_TONE: Record<IncidentStatus, Tone> = {
-  DETECTED: "rose",
-  INVESTIGATING: "sky",
-  ANALYZING: "violet",
-  AWAITING_APPROVAL: "amber",
-  REMEDIATING: "cyan",
-  VERIFYING: "cyan",
-  RESOLVED: "emerald",
-  FAILED: "rose",
-  ESCALATED: "amber",
+export const STATUS_TONE: Record<IncidentStatus, Tone> = {
+  DETECTED: "critical",
+  INVESTIGATING: "info",
+  ANALYZING: "info",
+  AWAITING_APPROVAL: "warn",
+  REMEDIATING: "info",
+  VERIFYING: "info",
+  RESOLVED: "ok",
+  FAILED: "critical",
+  ESCALATED: "warn",
 };
 
-export function StatusBadge({ status }: { status: IncidentStatus }) {
-  return <Badge tone={STATUS_TONE[status]}>{label(status)}</Badge>;
+export function StatusIndicator({ status }: { status: IncidentStatus }) {
+  return <Indicator tone={STATUS_TONE[status]}>{label(status)}</Indicator>;
 }
 
-const SEVERITY_TONE: Record<Severity, Tone> = { LOW: "slate", MEDIUM: "amber", HIGH: "rose", CRITICAL: "rose" };
+const SEVERITY_TONE: Record<Severity, Tone> = { CRITICAL: "critical", HIGH: "critical", MEDIUM: "warn", LOW: "neutral" };
 
-export function SeverityBadge({ severity }: { severity: Severity }) {
-  return <Badge tone={SEVERITY_TONE[severity]}>{severity}</Badge>;
+export function SeverityLabel({ severity }: { severity: Severity }) {
+  return (
+    <span className={`text-xs font-semibold tracking-wide ${TEXT[SEVERITY_TONE[severity]]}`}>
+      <span className="sr-only">Severity </span>
+      {severity}
+    </span>
+  );
 }
 
-const RISK_TONE: Record<RiskLevel, Tone> = { LOW: "emerald", MEDIUM: "amber", HIGH: "rose" };
-
-export function RiskBadge({ risk }: { risk: RiskLevel }) {
-  return <Badge tone={RISK_TONE[risk]}>Risk {risk}</Badge>;
+export function ServiceStatusIndicator({ status }: { status: ServiceStatus | null }) {
+  if (!status) return <Indicator tone="neutral">No data</Indicator>;
+  const tone: Tone = status === "HEALTHY" ? "ok" : status === "DEGRADED" ? "warn" : "critical";
+  return <Indicator tone={tone}>{label(status)}</Indicator>;
 }
 
-export function ServiceStatusBadge({ status }: { status: ServiceStatus | null }) {
-  if (!status) return <Badge>No data</Badge>;
-  return <Badge tone={status === "HEALTHY" ? "emerald" : status === "DEGRADED" ? "amber" : "rose"}>{status}</Badge>;
+const RISK_TONE: Record<RiskLevel, Tone> = { LOW: "neutral", MEDIUM: "warn", HIGH: "critical" };
+
+export function RiskLabel({ risk }: { risk: RiskLevel }) {
+  return <span className={`font-medium ${TEXT[RISK_TONE[risk]]}`}>{label(risk)}</span>;
 }
 
-export function Card({
+// --- layout --------------------------------------------------------------------------------------
+
+export function PageHeader({
   title,
-  eyebrow,
+  description,
   actions,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight text-ink">{title}</h1>
+        {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+/** A titled region of a page, separated by a rule rather than wrapped in a card. */
+export function Section({
+  id,
+  title,
+  aside,
   children,
   className = "",
 }: {
-  title?: ReactNode;
-  eyebrow?: string;
-  actions?: ReactNode;
+  id?: string;
+  title: ReactNode;
+  aside?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={`rounded-xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur ${className}`}>
-      {(title || eyebrow || actions) && (
-        <header className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            {eyebrow && <p className="font-mono text-[11px] tracking-widest text-cyan-400 uppercase">{eyebrow}</p>}
-            {title && <h2 className="text-base font-semibold text-slate-100">{title}</h2>}
-          </div>
-          {actions}
-        </header>
-      )}
+    <section id={id} aria-labelledby={id ? `${id}-title` : undefined} className={`scroll-mt-6 ${className}`}>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2">
+        <h2 id={id ? `${id}-title` : undefined} className="text-[15px] font-semibold text-ink">
+          {title}
+        </h2>
+        {aside && <div className="text-xs text-muted">{aside}</div>}
+      </div>
       {children}
     </section>
   );
 }
 
+/** A small uppercase label for sub-parts of a section. */
+export function Subheading({ children }: { children: ReactNode }) {
+  return <h3 className="mt-5 mb-2 text-xs font-medium tracking-wide text-muted uppercase">{children}</h3>;
+}
+
+export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-md border border-line bg-panel ${className}`}>{children}</div>;
+}
+
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-slate-500">{children}</p>;
+  return <p className="text-sm text-muted">{children}</p>;
 }
 
 export function ErrorNote({ children }: { children: ReactNode }) {
   return (
-    <p role="alert" className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+    <p role="alert" className="border-l-2 border-red-600 bg-red-50 px-3 py-2 text-sm text-red-800">
       {children}
     </p>
   );
 }
 
-/** Citation chips: hovering shows the backend-supplied fact behind each evidence id. */
+// --- controls ------------------------------------------------------------------------------------
+
+type ButtonVariant = "primary" | "secondary" | "quiet";
+
+const BUTTON: Record<ButtonVariant, string> = {
+  primary: "bg-ink text-white hover:bg-zinc-700 disabled:bg-zinc-400",
+  secondary: "border border-line-strong bg-panel text-ink hover:bg-hover disabled:text-subtle",
+  quiet: "text-muted hover:text-ink disabled:text-subtle",
+};
+
+export function Button({
+  variant = "secondary",
+  className = "",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+  return (
+    <button
+      type="button"
+      {...props}
+      className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${BUTTON[variant]} ${className}`}
+    />
+  );
+}
+
+// --- tables --------------------------------------------------------------------------------------
+
+export const table = {
+  wrap: "overflow-x-auto",
+  table: "w-full border-collapse text-left text-sm",
+  th: "border-b border-line px-3 py-2 text-xs font-medium whitespace-nowrap text-muted first:pl-0 last:pr-0",
+  td: "border-b border-line px-3 py-2 align-top first:pl-0 last:pr-0",
+  mono: "font-mono text-[13px]",
+};
+
+// --- evidence citations --------------------------------------------------------------------------
+
+/** Citation ids; hovering (or focusing) one shows the backend-supplied fact behind it. */
 export function EvidenceRefs({ ids, evidence }: { ids: string[]; evidence: Map<string, EvidenceItem> }) {
   if (ids.length === 0) return null;
   return (
-    <span className="inline-flex flex-wrap gap-1 align-middle">
-      {ids.map((id) => (
-        <span
-          key={id}
-          title={evidence.get(id)?.fact ?? "Evidence not in this view"}
-          className="cursor-help rounded border border-slate-700 bg-slate-800 px-1.5 font-mono text-[10px] text-cyan-300"
-        >
-          {id}
-        </span>
-      ))}
+    <span className="inline-flex flex-wrap gap-1 align-baseline">
+      {ids.map((id) => {
+        const fact = evidence.get(id)?.fact ?? "Evidence not in this view";
+        return (
+          <abbr
+            key={id}
+            title={fact}
+            tabIndex={0}
+            aria-label={`Evidence ${id}: ${fact}`}
+            className="cursor-help rounded-sm border border-line px-1 font-mono text-[11px] text-muted no-underline"
+          >
+            {id}
+          </abbr>
+        );
+      })}
     </span>
   );
 }
@@ -121,13 +208,4 @@ export function evidenceIndex(...lists: EvidenceItem[][]): Map<string, EvidenceI
   const index = new Map<string, EvidenceItem>();
   for (const list of lists) for (const item of list) index.set(item.id, item);
   return index;
-}
-
-export function Meter({ value, tone = "cyan" }: { value: number; tone?: "cyan" | "emerald" | "amber" }) {
-  const color = { cyan: "bg-cyan-400", emerald: "bg-emerald-400", amber: "bg-amber-400" }[tone];
-  return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-      <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }} />
-    </div>
-  );
 }

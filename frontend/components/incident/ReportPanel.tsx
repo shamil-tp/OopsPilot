@@ -1,124 +1,177 @@
 "use client";
 
-import { motion } from "framer-motion";
+import type { ReactNode } from "react";
 
 import { SnapshotCompare } from "@/components/incident/SnapshotCompare";
-import { Badge, Card, SeverityBadge, StatusBadge } from "@/components/ui";
-import { dateTime, describeAction, label, percent, time } from "@/lib/format";
+import { Button, Dot, Panel, RiskLabel, Section, StatusIndicator, table } from "@/components/ui";
+import { dateTime, describeAction, duration, label, num, percent, time } from "@/lib/format";
 import { download, reportMarkdown } from "@/lib/report-markdown";
-import type { IncidentReport } from "@/types/api";
+import type { EvidenceItem, IncidentReport } from "@/types/api";
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Part({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="border-t border-slate-800 pt-4">
-      <h3 className="mb-2 text-[11px] font-semibold tracking-widest text-cyan-400 uppercase">{title}</h3>
+    <section className="border-t border-line pt-5">
+      <h3 className="mb-2 text-sm font-semibold text-ink">{title}</h3>
       {children}
-    </div>
+    </section>
   );
 }
 
+function Facts({ items }: { items: [string, ReactNode][] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+      {items.map(([term, value]) => (
+        <div key={term}>
+          <dt className="text-xs text-muted">{term}</dt>
+          <dd className="mt-0.5 text-sm text-ink">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The stored final report, laid out as an engineering incident report. */
 export function ReportPanel({ report }: { report: IncidentReport }) {
   const r = report.report;
   const { summary: s, root_cause: rca, remediation, approval, execution, verification: v, outcome } = r;
   const file = `${s.reference}-incident-report`;
   const cicd = r.investigation.evidence.filter((e) => e.source === "cicd");
+  const evidence: EvidenceItem[] = [...rca.supporting_evidence, ...cicd.filter((e) => !rca.supporting_evidence.some((x) => x.id === e.id))];
+  const passed = v.checks.filter((c) => c.passed).length;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-      <Card
-        eyebrow="Final incident report"
-        title={`${s.reference} · ${s.title}`}
-        className={outcome.recovered ? "border-emerald-500/30" : "border-rose-500/30"}
-        actions={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => download(`${file}.md`, reportMarkdown(r), "text/markdown")}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-cyan-400 hover:text-cyan-200"
-            >
-              Download report (.md)
-            </button>
-            <button
-              type="button"
-              onClick={() => download(`${file}.json`, JSON.stringify(report, null, 2), "application/json")}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:border-slate-500 hover:text-slate-200"
-            >
-              JSON
-            </button>
-          </div>
-        }
-      >
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <StatusBadge status={outcome.final_status} />
-          <SeverityBadge severity={s.severity} />
-          <Badge>{s.service}</Badge>
-          <Badge tone={outcome.recovered ? "emerald" : "rose"}>{label(outcome.recovery_status)}</Badge>
-          <span className="text-xs text-slate-500">
-            Detected {dateTime(s.created_at)} · Resolved {dateTime(s.resolved_at)}
-          </span>
-        </div>
+    <Section
+      id="report"
+      title="Incident report"
+      aside={
+        <span className="flex gap-2">
+          <Button className="px-2 py-1 text-xs" onClick={() => download(`${file}.md`, reportMarkdown(r), "text/markdown")}>
+            Download .md
+          </Button>
+          <Button
+            className="px-2 py-1 text-xs"
+            onClick={() => download(`${file}.json`, JSON.stringify(report, null, 2), "application/json")}
+          >
+            JSON
+          </Button>
+        </span>
+      }
+    >
+      <Panel className="space-y-5 p-5 sm:p-8">
+        <header>
+          <p className="font-mono text-xs text-muted">{s.reference}</p>
+          <h3 className="mt-0.5 text-lg font-semibold text-ink">{s.title}</h3>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+            <StatusIndicator status={outcome.final_status} />
+            <span>Report generated {dateTime(report.created_at)} from the stored results of every phase</span>
+          </p>
+        </header>
 
-        <div className="space-y-4">
-          <Section title="Root cause">
-            <p className="text-sm text-slate-100">{rca.root_cause}</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {label(rca.category)} · confidence {percent(rca.confidence)} · evidence{" "}
-              {rca.supporting_evidence.map((e) => e.id).join(", ")}
-            </p>
-          </Section>
+        <Part title="Summary">
+          <p className="text-sm text-ink">
+            {s.description} {s.service} was affected from detection at {dateTime(s.created_at)}
+            {s.resolved_at ? ` until it was resolved at ${dateTime(s.resolved_at)} (${duration(s.created_at, s.resolved_at)}).` : "."}
+          </p>
+        </Part>
 
-          {cicd.length > 0 && (
-            <Section title="CI/CD evidence (GitHub)">
-              <ul className="space-y-1">
-                {cicd.map((e) => (
-                  <li key={e.id} className="flex gap-2 font-mono text-[11px] leading-relaxed text-slate-400">
-                    <span className="shrink-0 text-cyan-300">{e.id}</span>
-                    <span className="break-words">{e.fact}</span>
-                  </li>
+        <Part title="Impact">
+          <Facts
+            items={[
+              ["Severity", s.severity],
+              ["Service", <span key="s" className="font-mono">{s.service}</span>],
+              ["Time to resolve", duration(s.created_at, s.resolved_at)],
+              ["Error rate at detection", <span key="e" className="font-mono">{num(execution.before.error_rate, "%")}</span>],
+              ["Latency (p95) at detection", <span key="l" className="font-mono">{num(execution.before.latency_ms, " ms")}</span>],
+              ["Status at detection", label(execution.before.status ?? "—")],
+            ]}
+          />
+        </Part>
+
+        <Part title="Timeline">
+          <div className={table.wrap}>
+            <table className={table.table}>
+              <tbody>
+                {r.timeline.map((entry, i) => (
+                  <tr key={i}>
+                    <td className={`${table.td} ${table.mono} w-20 whitespace-nowrap text-muted`}>{time(entry.timestamp)}</td>
+                    <td className={table.td}>{entry.message}</td>
+                  </tr>
                 ))}
-              </ul>
-            </Section>
-          )}
+              </tbody>
+            </table>
+          </div>
+        </Part>
 
-          <Section title="Remediation & human decision">
-            <p className="font-mono text-sm text-slate-100">
-              {describeAction(remediation.action, remediation.parameters, remediation.target)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Risk {remediation.risk} · approval {approval.status}
-              {approval.decided_at && ` at ${dateTime(approval.decided_at)}`} · executed:{" "}
-              {outcome.remediation_performed} (simulated)
-            </p>
-          </Section>
+        <Part title="Root cause">
+          <p className="text-sm font-medium text-ink">{rca.root_cause}</p>
+          <p className="mt-1 text-xs text-muted">
+            {label(rca.category)} · confidence {percent(rca.confidence)}
+          </p>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink">
+            {rca.causal_chain.map((step, i) => (
+              <li key={i}>
+                {step.statement} <span className="font-mono text-xs text-muted">{step.evidence_ids.join(", ")}</span>
+              </li>
+            ))}
+          </ol>
+        </Part>
 
-          <Section title="Recovery">
-            <SnapshotCompare before={execution.before} after={v.after} />
-            <p className="mt-2 text-sm text-slate-300">{v.reasoning_summary}</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {outcome.verification} · {v.checks.filter((c) => c.passed).length}/{v.checks.length} checks passed
-            </p>
-          </Section>
+        <Part title="Evidence">
+          <div className={table.wrap}>
+            <table className={table.table}>
+              <tbody>
+                {evidence.map((item) => (
+                  <tr key={item.id}>
+                    <td className={`${table.td} ${table.mono} w-12 font-medium`}>{item.id}</td>
+                    <td className={`${table.td} font-mono text-xs leading-relaxed break-words`}>{item.fact}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Part>
 
-          <Section title="Timeline">
-            <ol className="space-y-1">
-              {r.timeline.map((entry, i) => (
-                <li key={i} className="flex gap-3 text-xs">
-                  <span className="w-16 shrink-0 font-mono text-slate-500">{time(entry.timestamp)}</span>
-                  <span className="text-slate-300">{entry.message}</span>
-                </li>
-              ))}
-            </ol>
-          </Section>
+        <Part title="Remediation">
+          <p className="text-sm font-medium text-ink">
+            {describeAction(remediation.action, remediation.parameters, remediation.target)}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Risk <RiskLabel risk={remediation.risk} /> · proposed by the remediation agent, validated by backend policy
+          </p>
+          <p className="mt-2 text-sm text-ink">{remediation.reason}</p>
+        </Part>
 
-          <Section title="Final outcome">
-            <p className={`text-sm font-semibold ${outcome.recovered ? "text-emerald-300" : "text-rose-300"}`}>
+        <Part title="Approval">
+          <Facts
+            items={[
+              ["Human decision", label(outcome.human_decision)],
+              ["Requested", dateTime(approval.requested_at)],
+              ["Decided", dateTime(approval.decided_at)],
+            ]}
+          />
+          <p className="mt-3 text-sm text-ink">
+            Executed: {outcome.remediation_performed ?? "nothing"} <span className="text-muted">(simulated)</span>
+          </p>
+        </Part>
+
+        <Part title="Verification">
+          <p className="mb-3 text-sm text-ink">
+            {passed} / {v.checks.length} backend checks passed. {v.reasoning_summary}
+          </p>
+          <SnapshotCompare before={execution.before} after={v.after} />
+        </Part>
+
+        <Part title="Final outcome">
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <Dot tone={outcome.recovered ? "ok" : "critical"} />
+            <span className={outcome.recovered ? "text-emerald-700" : "text-red-700"}>
               {outcome.recovered
-                ? `Recovered and ${outcome.final_status}: the approved remediation restored ${s.service}.`
-                : `Not recovered (${outcome.final_status}): human investigation required.`}
-            </p>
-          </Section>
-        </div>
-      </Card>
-    </motion.div>
+                ? `${label(outcome.final_status)}: the approved remediation restored ${s.service}.`
+                : `${label(outcome.final_status)}: not recovered; human investigation required.`}
+            </span>
+          </p>
+        </Part>
+      </Panel>
+    </Section>
   );
 }

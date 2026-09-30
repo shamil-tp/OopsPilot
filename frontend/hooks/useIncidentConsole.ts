@@ -71,7 +71,8 @@ const REFRESH_ON = new Set([
   "deployment_detected",
   "error",
 ]);
-// Same look-back as the investigation's CI/CD evidence window (backend app/agents/evidence.py).
+// Same window as the investigation's CI/CD evidence (backend app/agents/evidence.py): the 2 h
+// before detection, so an old incident never shows later deployments.
 const CICD_LOOKBACK_MS = 2 * 60 * 60 * 1000;
 const POLL_MS = 3000;
 const RECONNECT_MS = 5000;
@@ -95,6 +96,7 @@ async function fetchIncidentData(incidentId: number): Promise<IncidentData> {
     listCicdEvents({
       service: incident.service_name,
       since: new Date(Date.parse(incident.created_at) - CICD_LOOKBACK_MS).toISOString(),
+      until: incident.created_at,
       limit: 10,
     }),
   ]);
