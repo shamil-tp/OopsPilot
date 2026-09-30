@@ -7,6 +7,7 @@ const SOURCE_LABEL: Record<EvidenceSource, string> = {
   health: "Health",
   deployments: "Deployments",
   previous_incidents: "Previous incidents",
+  cicd: "CI/CD (GitHub)",
   execution: "Execution",
 };
 

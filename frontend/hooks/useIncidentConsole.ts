@@ -11,12 +11,14 @@ import {
   getRemediation,
   getReport,
   getVerification,
+  listCicdEvents,
   listEvents,
 } from "@/lib/api";
 import { WS_URL } from "@/lib/config";
 import { TERMINAL } from "@/lib/format";
 import type {
   AgentEvent,
+  CicdEvent,
   ExecutionRun,
   Incident,
   IncidentReport,
@@ -38,6 +40,8 @@ export interface IncidentData {
   execution: ExecutionRun | null;
   verification: VerificationRun | null;
   report: IncidentReport | null;
+  /** The service's GitHub CI/CD events from 2 h before detection onwards. */
+  cicd: CicdEvent[];
 }
 
 const EMPTY: IncidentData = {
@@ -49,6 +53,7 @@ const EMPTY: IncidentData = {
   execution: null,
   verification: null,
   report: null,
+  cicd: [],
 };
 
 // Events after which a phase result may have changed: re-read the REST resources.
@@ -62,25 +67,38 @@ const REFRESH_ON = new Set([
   "verification_completed",
   "incident_resolved",
   "report_generated",
+  "cicd_event_recorded",
+  "deployment_detected",
   "error",
 ]);
+// Same look-back as the investigation's CI/CD evidence window (backend app/agents/evidence.py).
+const CICD_LOOKBACK_MS = 2 * 60 * 60 * 1000;
 const POLL_MS = 3000;
 const RECONNECT_MS = 5000;
 
 /** Pure read of every stored resource of the incident (no state updates). */
 async function fetchIncidentData(incidentId: number): Promise<IncidentData> {
-  const [incident, events, investigation, analysis, remediation, execution, verification, report] =
-    await Promise.all([
-      getIncident(incidentId),
-      listEvents(incidentId),
-      getInvestigation(incidentId),
-      getAnalysis(incidentId),
-      getRemediation(incidentId),
-      getExecution(incidentId),
-      getVerification(incidentId),
-      getReport(incidentId),
-    ]);
-  return { incident, events, investigation, analysis, remediation, execution, verification, report };
+  const [incident, events] = await Promise.all([getIncident(incidentId), listEvents(incidentId)]);
+  // Only ask for a phase's stored result once the timeline shows that phase ran, so an incident
+  // that is early in its lifecycle does not produce expected 404/409 responses (and browser
+  // console errors) on every refresh.
+  const agents = new Set(events.map((e) => e.agent));
+  const types = new Set(events.map((e) => e.event_type));
+  const when = <T,>(ran: boolean, load: () => Promise<T | null>) => (ran ? load() : Promise.resolve(null));
+  const [investigation, analysis, remediation, execution, verification, report, cicd] = await Promise.all([
+    when(agents.has("investigation"), () => getInvestigation(incidentId)),
+    when(agents.has("root_cause"), () => getAnalysis(incidentId)),
+    when(agents.has("remediation"), () => getRemediation(incidentId)),
+    when(types.has("remediation_started"), () => getExecution(incidentId)),
+    when(agents.has("verification"), () => getVerification(incidentId)),
+    when(types.has("verification_completed"), () => getReport(incidentId)),
+    listCicdEvents({
+      service: incident.service_name,
+      since: new Date(Date.parse(incident.created_at) - CICD_LOOKBACK_MS).toISOString(),
+      limit: 10,
+    }),
+  ]);
+  return { incident, events, investigation, analysis, remediation, execution, verification, report, cicd };
 }
 
 function mergeEvents(current: AgentEvent[], incoming: AgentEvent[]): AgentEvent[] {

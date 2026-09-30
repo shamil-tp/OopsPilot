@@ -2,7 +2,7 @@
 -- OpsPilot — complete database schema for Supabase PostgreSQL
 -- =============================================================================
 --
--- Equivalent to `alembic upgrade head` (migrations 0001 + 0002 + 0003). Generated from
+-- Equivalent to `alembic upgrade head` (migrations 0001 + 0002 + 0003 + 0004). Generated from
 -- `alembic upgrade head --sql` and annotated. The Alembic migrations in
 -- backend/alembic/versions/ remain the source of truth; regenerate this file
 -- whenever a migration is added:
@@ -12,7 +12,7 @@
 --         alembic upgrade head --sql 2>/dev/null
 --
 -- Use EITHER this script OR `alembic upgrade head` on a database, not both.
--- The script records revision 0003 in `alembic_version`, so Alembic treats the
+-- The script records revision 0004 in `alembic_version`, so Alembic treats the
 -- database as fully migrated and future migrations apply normally.
 --
 -- Safety:
@@ -196,6 +196,51 @@ CREATE TABLE public.incident_reports (
     CONSTRAINT uq_incident_reports_incident_id UNIQUE (incident_id)
 );
 
+-- Migration 0004: normalized GitHub CI/CD events (webhooks). delivery_id = X-GitHub-Delivery
+-- (unique: redeliveries are idempotent); deployment_key is set only on the event that created a
+-- deployment (unique: one deployment per workflow run attempt).
+-- category: COMMIT | BUILD | TEST | DEPLOYMENT   status: QUEUED | IN_PROGRESS | COMPLETED
+-- conclusion: SUCCESS | FAILURE | CANCELLED | TIMED_OUT | NEUTRAL | SKIPPED | OTHER
+CREATE TABLE public.cicd_events (
+    id SERIAL NOT NULL,
+    provider VARCHAR(16) NOT NULL,
+    delivery_id VARCHAR(64) NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    category VARCHAR(32) NOT NULL,
+    repository VARCHAR(140) NOT NULL,
+    branch VARCHAR(255),
+    commit_sha VARCHAR(40),
+    commit_message VARCHAR(200),
+    actor VARCHAR(100),
+    workflow_name VARCHAR(100),
+    workflow_run_id BIGINT,
+    run_number INTEGER,
+    status VARCHAR(32) NOT NULL,
+    conclusion VARCHAR(32),
+    service_name VARCHAR(64),
+    environment VARCHAR(64),
+    version VARCHAR(32),
+    version_source VARCHAR(32),
+    html_url VARCHAR(300),
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    received_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deployment_id INTEGER,
+    deployment_key VARCHAR(200),
+    metadata JSONB NOT NULL,
+    CONSTRAINT pk_cicd_events PRIMARY KEY (id),
+    CONSTRAINT fk_cicd_events_deployment_id_deployments FOREIGN KEY (deployment_id)
+        REFERENCES public.deployments (id) ON DELETE SET NULL,
+    CONSTRAINT uq_cicd_events_delivery_id UNIQUE (delivery_id),
+    CONSTRAINT uq_cicd_events_deployment_key UNIQUE (deployment_key)
+);
+CREATE INDEX ix_cicd_events_commit_sha ON public.cicd_events (commit_sha);
+CREATE INDEX ix_cicd_events_occurred_at ON public.cicd_events (occurred_at);
+CREATE INDEX ix_cicd_events_repository ON public.cicd_events (repository);
+CREATE INDEX ix_cicd_events_service_name_occurred_at ON public.cicd_events (service_name, occurred_at);
+CREATE INDEX ix_cicd_events_workflow_run_id ON public.cicd_events (workflow_run_id);
+
 -- -----------------------------------------------------------------------------
 -- Migration 0002: lock out Supabase's Data API (RLS on, no policies)
 -- -----------------------------------------------------------------------------
@@ -209,9 +254,10 @@ ALTER TABLE public.agent_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incident_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cicd_events ENABLE ROW LEVEL SECURITY;  -- migration 0004
 
 -- Tell Alembic the schema is at the latest migration.
-INSERT INTO public.alembic_version (version_num) VALUES ('0003');
+INSERT INTO public.alembic_version (version_num) VALUES ('0004');
 
 COMMIT;
 
@@ -219,6 +265,6 @@ COMMIT;
 -- Verification (run separately after the script succeeds)
 -- -----------------------------------------------------------------------------
 -- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
---   -> 9 rows (8 OpsPilot tables + alembic_version), rowsecurity = true for all
+--   -> 10 rows (9 OpsPilot tables + alembic_version), rowsecurity = true for all
 -- SELECT version_num FROM public.alembic_version;
---   -> 0003
+--   -> 0004

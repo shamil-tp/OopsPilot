@@ -5,7 +5,7 @@ Importing this package registers every tool on `app.tools.registry.registry`.
 Owner: Backend/DevOps Simulation.
 """
 
-from app.tools import telemetry_tools  # noqa: F401  (registers the tools)
+from app.tools import cicd_tools, telemetry_tools  # noqa: F401  (registers the tools)
 from app.tools.registry import (
     AGENT_TOOL_ALLOWLIST,
     ToolError,

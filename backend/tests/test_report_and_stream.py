@@ -246,7 +246,8 @@ async def test_stream_sends_history_then_status_then_new_events(
     incident_id = (await client.post("/api/incidents/simulate")).json()["id"]
     messages = stream.incident_messages(incident_id, poll_interval=0.01)
 
-    first = await collect(messages, 2)
+    # History: incident_created + the replayed demo CI/CD events (4), then the status.
+    first = await collect(messages, 6)
     EventRecorder(db, incident_id, AgentName.INVESTIGATION).emit("agent_started", "later event")
     await db.commit()
     later = await collect(messages, 1)
@@ -254,13 +255,14 @@ async def test_stream_sends_history_then_status_then_new_events(
 
     assert first[0]["type"] == "incident_created"
     assert first[0]["event_type"] == "incident_created" and first[0]["incident_id"] == incident_id
-    assert first[1] == {
+    assert [m["type"] for m in first[1:5]] == ["cicd_event_recorded"] * 3 + ["deployment_detected"]
+    assert first[5] == {
         "type": "incident_status",
         "incident_id": incident_id,
         "incident_status": "DETECTED",
     }
     assert later[0]["type"] == "agent_started" and later[0]["message"] == "later event"
-    assert later[0]["id"] > first[0]["id"]
+    assert later[0]["id"] > first[4]["id"]
 
 
 async def test_stream_resumes_after_an_event_id(client: AsyncClient) -> None:
@@ -392,3 +394,44 @@ async def test_no_agent_run_is_created_by_reading(
         assert (await client.get(f"/api/incidents/{incident_id}/{path}")).status_code == 200
 
     assert await db.scalar(select(func.count()).select_from(AgentRun)) == before
+
+
+async def test_no_secrets_in_report_events_or_api_responses(
+    client: AsyncClient, fake: FakeProvider
+) -> None:
+    incident_id = await run_to(client)
+    settings = get_settings()
+    secrets = [k.get_secret_value() for k in settings.gemini_api_keys]
+    if settings.github_webhook_secret:
+        secrets.append(settings.github_webhook_secret.get_secret_value())
+
+    bodies = [
+        (await client.get(path)).text
+        for path in (
+            f"/api/incidents/{incident_id}/report",
+            f"/api/incidents/{incident_id}/events",
+            f"/api/incidents/{incident_id}",
+            f"/api/incidents/{incident_id}/analysis",
+            f"/api/incidents/{incident_id}/remediation",
+            f"/api/incidents/{incident_id}/execution",
+            f"/api/incidents/{incident_id}/verification",
+            "/api/incidents",
+            "/api/system/health",
+        )
+    ]
+    bodies.extend(str(m) for m in await _collect_stream(incident_id))
+
+    for body in bodies:
+        for secret in secrets:
+            assert secret not in body
+        for marker in ("GEMINI_API_KEY", "AIza", "Traceback", "postgresql://", "password"):
+            assert marker not in body
+
+
+async def _collect_stream(incident_id: int) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    async for message in stream.incident_messages(incident_id, poll_interval=0.01):
+        messages.append(message)
+        if message["type"] == "incident_status":
+            return messages
+    return messages

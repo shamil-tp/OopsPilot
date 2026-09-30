@@ -98,8 +98,15 @@ async def test_events_are_stored_and_listed_chronologically(
     assert response.status_code == 200
     events = response.json()
     types = [e["event_type"] for e in events]
-    assert types[0] == "incident_created"
-    assert types[1] == "agent_started"
+    # The simulation replays the demo repository's GitHub deliveries onto the incident timeline.
+    assert types[:5] == [
+        "incident_created",
+        "cicd_event_recorded",  # push to main
+        "cicd_event_recorded",  # tag v1.8.2
+        "cicd_event_recorded",  # deploy-production run: SUCCESS
+        "deployment_detected",  # linked to the v1.8.2 deployment
+    ]
+    assert types[5] == "agent_started"
     assert types[-1] == "investigation_completed"
     for expected in ("tool_started", "tool_completed", "evidence_found"):
         assert expected in types
@@ -111,8 +118,10 @@ async def test_events_are_stored_and_listed_chronologically(
         "get_recent_deployments",
         "get_application_logs",
         "get_previous_incidents",
+        "get_recent_cicd_events",
     }
-    assert all(e["agent"] == "investigation" for e in events[1:])
+    assert all(e["agent"] is None for e in events[:5])
+    assert all(e["agent"] == "investigation" for e in events[5:])
 
 
 async def test_investigation_does_not_remediate(

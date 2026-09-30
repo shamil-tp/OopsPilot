@@ -35,6 +35,12 @@ jobs:
           cat health.json
           test "$status" = "503"
           grep -q '"database":{"status":"unavailable"' health.json
+          # GitHub webhook: reports "not configured" (no secret in CI) and refuses unsigned deliveries.
+          curl --silent http://localhost:8000/api/webhooks/github/status | grep -q '"configured":false'
+          webhook=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST \
+            -H 'X-GitHub-Event: ping' -H 'X-GitHub-Delivery: ci' -d '{}' \
+            http://localhost:8000/api/webhooks/github)
+          test "$webhook" = "503"
           curl --fail --silent --output /dev/null --retry 10 --retry-delay 2 --retry-all-errors http://localhost:3000
 
       - name: Show logs on failure

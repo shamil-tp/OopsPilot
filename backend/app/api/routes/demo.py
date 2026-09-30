@@ -15,9 +15,10 @@ router = APIRouter(prefix="/demo", tags=["demo"])
     response_model=DemoResetResponse,
     summary="Reset the demo environment",
     description=(
-        "Deletes all incidents (with their agent runs, events, approvals and reports) and the "
-        "simulated services' logs, deployments and health, then seeds a healthy environment "
-        "running payment-api v1.8.1. Never drops or truncates tables."
+        "Deletes all incidents (with their agent runs, events, approvals and reports), the "
+        "simulated services' logs, deployments and health, and the demo repository's CI/CD "
+        "events, then seeds a healthy environment running payment-api v1.8.1. CI/CD events from "
+        "a real configured repository are kept. Never drops or truncates tables."
     ),
 )
 async def reset_demo(db: Annotated[AsyncSession, Depends(get_db)]) -> DemoResetResponse:
@@ -28,4 +29,5 @@ async def reset_demo(db: Annotated[AsyncSession, Depends(get_db)]) -> DemoResetR
         logs_deleted=result.logs_deleted,
         deployments_deleted=result.deployments_deleted,
         health_records_deleted=result.health_records_deleted,
+        cicd_events_deleted=result.cicd_events_deleted,
     )

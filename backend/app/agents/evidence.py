@@ -8,8 +8,10 @@ The backend decides what the model sees. For an incident detected at T0 on servi
 - health: S now and S's last HEALTHY snapshot before T0 (the baseline), plus S's dependencies
 - deployments: S's last 3 deployments at or before T0
 - previous incidents: S's last 3 earlier incidents
+- CI/CD: S's last 5 normalized GitHub events (pushes, workflow runs, deployments) in the 2 h
+  before T0, read from the backend's cicd_events (never raw payloads, never GitHub itself)
 
-Every item gets a citation id (L1, H1, D1, P1, ...) so findings can be checked against it.
+Every item gets a citation id (L1, H1, D1, P1, C1, ...) so findings can be checked against it.
 Identical input always yields the identical package; the same code serves every service.
 """
 
@@ -20,6 +22,7 @@ from typing import Any
 
 from app.models import Incident
 from app.models.enums import LogLevel, ServiceStatus, Severity
+from app.schemas.cicd import CicdEventRead
 from app.schemas.common import as_utc
 from app.schemas.investigation import EvidenceItem, PreviousIncidentRead
 from app.schemas.services import DeploymentRead, LogEntryRead, ServiceHealthRead
@@ -34,6 +37,8 @@ MAX_CHANGE_EVENTS = 5
 CHANGE_EVENT_WINDOW = timedelta(seconds=60)
 MAX_DEPLOYMENTS = 3
 MAX_PREVIOUS_INCIDENTS = 3
+CICD_WINDOW = timedelta(hours=2)
+MAX_CICD_EVENTS = 5
 # Metadata keys that add tokens but no diagnostic value.
 _NOISY_META = {"request_id"}
 
@@ -73,6 +78,7 @@ class EvidencePackage:
     items: list[EvidenceItem] = field(default_factory=list)
     deployments: list[DeploymentRead] = field(default_factory=list)
     previous_incidents: list[PreviousIncidentRead] = field(default_factory=list)
+    cicd_events: list[CicdEventRead] = field(default_factory=list)
 
     @property
     def ids(self) -> set[str]:
@@ -135,14 +141,24 @@ class EvidenceCollector:
             limit=MAX_PREVIOUS_INCIDENTS,
         )
 
+        cicd_events = await self._tool(
+            "get_recent_cicd_events",
+            service=service,
+            since=t0 - CICD_WINDOW,
+            until=t0,
+            limit=MAX_CICD_EVENTS,
+        )
+
         package.items += self._log_items(service, logs, deployments, t0)
         health = [(current, "current"), (baseline, "last healthy before incident")]
         health += [(snapshot, f"dependency of {service}") for _, snapshot in dependencies]
         package.items += self._health_items(health, t0)
         package.items += self._deployment_items(deployments, t0)
         package.items += self._previous_items(service, previous)
+        package.items += self._cicd_items(cicd_events, t0)
         package.deployments = deployments
         package.previous_incidents = previous
+        package.cicd_events = cicd_events
         self._announce(package, current)
         return package
 
@@ -281,6 +297,59 @@ class EvidenceCollector:
             for n, p in enumerate(previous, start=1)
         ]
 
+    @staticmethod
+    def _cicd_items(events: list[CicdEventRead], t0: datetime) -> list[EvidenceItem]:
+        items = []
+        for n, e in enumerate(events, start=1):
+            sha = e.commit_sha[:7] if e.commit_sha else "unknown"
+            at = f"{e.occurred_at:%H:%M:%S} ({relative(e.occurred_at, t0)})"
+            if e.event_type == "push":
+                tag = e.metadata.get("tag")
+                if tag:
+                    fact = f"{at} GitHub tag {tag} pushed for commit {sha} in {e.repository}"
+                else:
+                    files = e.metadata.get("changed_files") or []
+                    fact = (
+                        f"{at} GitHub push to {e.branch or 'unknown ref'} in {e.repository}: "
+                        f"commit {sha} by {e.actor or 'unknown'}, "
+                        f'message (quoted data) "{e.commit_message or ""}"'
+                        + (f", files changed: {', '.join(files[:5])}" if files else "")
+                    )
+            else:
+                name = e.workflow_name or "GitHub deployment"
+                run = f" #{e.run_number}" if e.run_number else ""
+                timing = ", ".join(
+                    part
+                    for part in (
+                        f"started {relative(e.started_at, t0)}" if e.started_at else "",
+                        f"completed {relative(e.completed_at, t0)}" if e.completed_at else "",
+                    )
+                    if part
+                )
+                version = (
+                    f"version {e.version} (from {e.version_source})"
+                    if e.version
+                    else "version unknown"
+                )
+                fact = (
+                    f"{at} GitHub {e.event_type} '{name}'{run} [{e.category}"
+                    f"{', ' + e.environment if e.environment else ''}]: {e.status}"
+                    f"{'/' + e.conclusion if e.conclusion else ''}"
+                    f"{' (' + timing + ')' if timing else ''}, commit {sha}, {version}"
+                    + (", recorded as a deployment" if e.deployment_id else "")
+                )
+            items.append(
+                EvidenceItem(
+                    id=f"C{n}",
+                    source="cicd",
+                    service=e.service_name or "unknown",
+                    timestamp=e.occurred_at,
+                    fact=fact,
+                    data=e.model_dump(mode="json", exclude={"delivery_id", "html_url"}),
+                )
+            )
+        return items
+
     def _announce(self, package: EvidencePackage, current: ServiceHealthRead | None) -> None:
         """Human-readable highlights for the timeline (deterministic, no AI)."""
         logs = package.of("logs")
@@ -308,6 +377,19 @@ class EvidenceCollector:
                 f"({relative(latest.timestamp, package.detected_at)} relative to detection)",
                 source="deployments",
                 evidence_ids=[i.id for i in package.of("deployments")],
+            )
+        if package.cicd_events:
+            deploys = [e for e in package.cicd_events if e.category == "DEPLOYMENT"]
+            latest = deploys[-1] if deploys else package.cicd_events[-1]
+            outcome = latest.conclusion or latest.status
+            self._events.emit(
+                "evidence_found",
+                f"{len(package.cicd_events)} GitHub CI/CD event(s) in the 2 h before detection; "
+                f"latest {latest.workflow_name or latest.event_type}: {outcome}"
+                + (f" ({latest.version})" if latest.version else "")
+                + f" at {latest.occurred_at:%H:%M:%S}",
+                source="cicd",
+                evidence_ids=[i.id for i in package.of("cicd")],
             )
         self._events.emit(
             "evidence_found",

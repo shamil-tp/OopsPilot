@@ -97,6 +97,8 @@ export interface DemoResetResponse {
   logs_deleted: number;
   deployments_deleted: number;
   health_records_deleted: number;
+  /** Demo-repository CI/CD events only; a real repository's events are kept. */
+  cicd_events_deleted: number;
 }
 
 /** Body of every error response (FastAPI's `{"detail": ...}`). */
@@ -112,7 +114,7 @@ export type ActionType = "ROLLBACK_DEPLOYMENT" | "RESTART_SERVICE" | "NO_ACTION"
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 export type RecoveryStatus = "RECOVERED" | "NOT_RECOVERED" | "NOT_ATTEMPTED";
-export type EvidenceSource = "logs" | "health" | "deployments" | "previous_incidents" | "execution";
+export type EvidenceSource = "logs" | "health" | "deployments" | "previous_incidents" | "cicd" | "execution";
 
 export interface AgentEvent {
   id: number;
@@ -398,3 +400,58 @@ export interface StreamErrorMessage {
 }
 
 export type StreamMessage = StreamEventMessage | StreamStatusMessage | StreamErrorMessage;
+
+// --- CI/CD telemetry (GitHub webhooks): app/schemas/cicd.py -------------------------------------
+
+export type CicdCategory = "COMMIT" | "BUILD" | "TEST" | "DEPLOYMENT";
+export type CicdStatus = "QUEUED" | "IN_PROGRESS" | "COMPLETED";
+export type CicdConclusion = "SUCCESS" | "FAILURE" | "CANCELLED" | "TIMED_OUT" | "NEUTRAL" | "SKIPPED" | "OTHER";
+
+/** One normalized CI/CD event (never the raw GitHub payload). */
+export interface CicdEvent {
+  id: number;
+  provider: string;
+  delivery_id: string;
+  event_type: string;
+  category: CicdCategory;
+  repository: string;
+  branch: string | null;
+  commit_sha: string | null;
+  commit_message: string | null;
+  actor: string | null;
+  workflow_name: string | null;
+  workflow_run_id: number | null;
+  run_number: number | null;
+  status: CicdStatus;
+  conclusion: CicdConclusion | null;
+  service_name: string | null;
+  environment: string | null;
+  /** Null when no tag/metadata names a version (never invented). */
+  version: string | null;
+  version_source: string | null;
+  html_url: string | null;
+  occurred_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  received_at: string;
+  deployment_id: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface CicdEventQuery {
+  service?: string;
+  repository?: string;
+  category?: CicdCategory;
+  since?: string;
+  until?: string;
+  limit?: number;
+}
+
+/** Non-sensitive webhook configuration (never the secret). */
+export interface WebhookStatus {
+  configured: boolean;
+  repository: string | null;
+  service: string;
+  supported_events: string[];
+  max_payload_bytes: number;
+}

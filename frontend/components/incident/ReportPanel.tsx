@@ -21,6 +21,7 @@ export function ReportPanel({ report }: { report: IncidentReport }) {
   const r = report.report;
   const { summary: s, root_cause: rca, remediation, approval, execution, verification: v, outcome } = r;
   const file = `${s.reference}-incident-report`;
+  const cicd = r.investigation.evidence.filter((e) => e.source === "cicd");
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -65,6 +66,19 @@ export function ReportPanel({ report }: { report: IncidentReport }) {
               {rca.supporting_evidence.map((e) => e.id).join(", ")}
             </p>
           </Section>
+
+          {cicd.length > 0 && (
+            <Section title="CI/CD evidence (GitHub)">
+              <ul className="space-y-1">
+                {cicd.map((e) => (
+                  <li key={e.id} className="flex gap-2 font-mono text-[11px] leading-relaxed text-slate-400">
+                    <span className="shrink-0 text-cyan-300">{e.id}</span>
+                    <span className="break-words">{e.fact}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
 
           <Section title="Remediation & human decision">
             <p className="font-mono text-sm text-slate-100">

@@ -13,6 +13,8 @@ const DETAIL = new Set(["tool_started", "tool_completed", "recovery_check"]);
 
 const ICON: Record<string, string> = {
   incident_created: "🚨",
+  cicd_event_recorded: "⎇",
+  deployment_detected: "🚀",
   agent_started: "▶",
   evidence_found: "🔎",
   investigation_completed: "✓",

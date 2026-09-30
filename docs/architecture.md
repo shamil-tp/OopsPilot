@@ -1,6 +1,49 @@
 # OpsPilot Architecture
 
-> Living document. Sections are filled in as each phase lands (see `CLAUDE.md` §51).
+## Final architecture
+
+```text
+GitHub (push, workflow_run, deployment_status)
+   │  signed webhook (HMAC SHA-256 over the raw body)
+   ▼
+FastAPI  POST /api/webhooks/github ── validate ── normalize ── cicd_events ── deployments
+   │                                                          (CI/CD & deployment telemetry)
+   ▼
+Incident detected (simulated payment-api regression; deterministic telemetry)
+   │  POST /api/incidents/{id}/investigate
+   ▼
+Investigation Agent ── read-only, allowlisted, bounded tools ── evidence L/H/D/P/C ── 1 Gemini call
+   │  POST .../analyze
+   ▼
+Root Cause Agent ── stored evidence as one timeline ── cited root cause + causal chain ── 1 Gemini call
+   │  POST .../remediate
+   ▼
+Remediation Agent ── proposes 1 of 4 allowlisted actions ── backend policy: risk, approval, versions ── 1 Gemini call
+   │  approval PENDING  (incident AWAITING_APPROVAL)
+   ▼
+Human approval  POST .../approve | .../reject   (no request body)
+   │
+   ▼
+Execution ── backend re-validates and runs exactly the stored parameters, once (simulated rollback) ── 0 AI calls
+   │  POST .../verify
+   ▼
+Verification Agent ── 6 deterministic backend checks decide RESOLVED / FAILED ── 1 Gemini call (summary only)
+   │
+   ▼
+Incident report ── assembled from stored results, stored once ── 0 AI calls
+   │
+   ▼
+Next.js dashboard ◀── REST (state, commands)  +  WS /ws/incidents/{id} (live events; REST polling fallback)
+
+Cross-cutting:  AIProvider → GeminiProvider (gemini-3.1-flash-lite) → key pool (4 keys: round-robin,
+                cooldown, fallback, bounded retries) · PostgreSQL on Supabase (RLS on, backend-only access)
+                · Docker Compose (backend + frontend) · GitHub Actions (lint, tests on PostgreSQL,
+                alembic check, frontend build, Docker smoke test)
+```
+
+Every step is a separate REST command that the backend accepts only in the right incident state
+(atomic, conflict-safe transitions); repeating a completed step returns the stored result without
+another AI call or execution.
 
 ## Components
 
@@ -51,6 +94,7 @@ Next.js ──REST + WebSocket──▶ FastAPI ──SQLAlchemy + asyncpg──
 | `agent_events` | Timeline events; persisted and broadcast over `WS /ws/incidents/{id}` |
 | `approvals` | Human approval gate for risky actions (`action_type`, `target`, `risk`, `status`, `decided_at`) |
 | `incident_reports` | Final report: root cause, confidence, evidence, action taken, recovery status |
+| `cicd_events` | Normalized GitHub CI/CD events (push, workflow_run, deployment_status); unique `delivery_id`, optional link to the `deployments` row it created or matched |
 
 Every agent, event, approval, and report row carries `incident_id` (with `ON DELETE CASCADE`), so
 concurrent investigations never mix evidence.
@@ -165,8 +209,55 @@ deployment data, with no AI call.
 incident's final state (`RESOLVED` or `FAILED`); the model's schema contains only a summary and
 cited evidence ids. Verification never executes, retries or proposes remediation.
 
-## Safety model
+## GitHub webhooks & CI/CD telemetry (Phase 11)
+
+```text
+GitHub → POST /api/webhooks/github → HMAC SHA-256 (raw body) → normalize (app/github)
+       → cicd_events (unique delivery_id) → deployments (successful production deploys only)
+       → agent_events of an active incident on that service → WS /ws/incidents/{id}
+Investigation Agent → get_recent_cicd_events (READ_ONLY, ≤ 24 h, ≤ 10) → evidence C1… → RCA
+```
+
+The webhook layer is separate from the agents: agents read normalized rows, never raw payloads,
+and never talk to GitHub. Ingestion is deterministic (no AI call). CI/CD failures are evidence
+only; they never create incidents. Versions come from explicit deployment metadata or release
+tags, never from guessing. The demo replays deterministic deliveries through the same ingestion
+service when an incident is simulated. Details: [github-webhooks.md](github-webhooks.md).
+
+## Security architecture
 
 The AI proposes, the backend validates, a human approves risky actions, and the backend executes
-only allowlisted actions. Read-only tools and approval-gated tools are separated by an explicit
-permission model enforced in the orchestrator (Phase 6–8).
+only allowlisted actions.
+
+**The AI can:** inspect the evidence the backend supplies (collected by allowlisted, bounded,
+read-only tools); identify patterns; propose a root cause; propose one of four allowlisted
+actions (`ROLLBACK_DEPLOYMENT`, `RESTART_SERVICE`, `NO_ACTION`, `ESCALATE_TO_HUMAN`); explain
+the verification result.
+
+**The AI cannot:** execute shell commands, SQL, HTTP requests or filesystem operations (no such
+tool exists; the model only fills a JSON schema); invent evidence (citations to ids the backend
+did not supply are dropped, and output without valid support fails); set risk or the approval
+requirement; choose an unvalidated service or version; execute anything; bypass approval; decide
+recovery or resolve an incident.
+
+**The backend controls:**
+
+| Control | Where |
+| --- | --- |
+| Tool allowlist per agent, READ_ONLY vs REQUIRES_HUMAN_APPROVAL, bounded Pydantic arguments, call cap, cache | `app/tools/registry.py` |
+| Input validation: Pydantic schemas, bounded strings / time windows / limits, known services, known repositories | `app/schemas`, `app/api/routes`, `app/github` |
+| Evidence citations (unknown ids removed; unsupported output fails) | each agent's guardrails |
+| Incident state machine: atomic `UPDATE … WHERE status = expected` claims; conflicts → 409 | `app/agents/common.py` |
+| Remediation policy: risk, approval requirement, target/version validation against real deployments | `app/services/remediation_policy.py` |
+| Execution: approved, re-validated, exactly the stored parameters, exactly once | `app/agents/approval.py` |
+| Verification: six deterministic checks decide the outcome | `app/agents/verification.py` |
+| Secrets: environment only; never logged, returned, streamed or sent to the browser | `app/core/config.py` (SecretStr), tests |
+
+**The human controls:** every risky remediation. Approve/reject take no request body, so a
+client can neither change the action, target, version, risk or parameters nor approve anything
+other than the stored proposal. Rejecting escalates the incident and executes nothing.
+
+**External input** follows the same rule: GitHub webhooks are authenticated (HMAC SHA-256 over
+the raw body, constant-time comparison), bounded (2 MiB), validated, idempotent, stored as data
+only, and can only add evidence. They cannot trigger remediation, workflows, commands or
+incidents. Webhook ingestion and report generation never call the AI.

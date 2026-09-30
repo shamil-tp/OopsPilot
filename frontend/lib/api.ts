@@ -1,6 +1,8 @@
 import { API_URL } from "@/lib/config";
 import type {
   AgentEvent,
+  CicdEvent,
+  CicdEventQuery,
   DecisionResponse,
   DemoResetResponse,
   Deployment,
@@ -14,6 +16,7 @@ import type {
   ServiceSummary,
   SystemHealth,
   VerificationRun,
+  WebhookStatus,
 } from "@/types/api";
 
 export class ApiError extends Error {
@@ -116,3 +119,15 @@ export const remediate = (id: number) => post<RemediationRun>(`/api/incidents/${
 export const approve = (id: number) => post<DecisionResponse>(`/api/incidents/${id}/approve`);
 export const reject = (id: number) => post<DecisionResponse>(`/api/incidents/${id}/reject`);
 export const verify = (id: number) => post<VerificationRun>(`/api/incidents/${id}/verify`);
+
+// --- CI/CD telemetry (read-only; GitHub delivers events to the backend, never to the browser) ---
+
+export function listCicdEvents(query: CicdEventQuery = {}): Promise<CicdEvent[]> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return getJson<CicdEvent[]>(`/api/cicd/events${qs ? `?${qs}` : ""}`);
+}
+export const getWebhookStatus = () => getJson<WebhookStatus>("/api/webhooks/github/status");

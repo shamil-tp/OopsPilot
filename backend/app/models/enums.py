@@ -78,6 +78,31 @@ class ApprovalStatus(StrEnum):
     EXPIRED = "EXPIRED"
 
 
+class CicdCategory(StrEnum):
+    """What a CI/CD event represents. Only DEPLOYMENT events can become deployment telemetry."""
+
+    COMMIT = "COMMIT"
+    BUILD = "BUILD"
+    TEST = "TEST"
+    DEPLOYMENT = "DEPLOYMENT"
+
+
+class CicdStatus(StrEnum):
+    QUEUED = "QUEUED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+
+
+class CicdConclusion(StrEnum):
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+    CANCELLED = "CANCELLED"
+    TIMED_OUT = "TIMED_OUT"
+    NEUTRAL = "NEUTRAL"
+    SKIPPED = "SKIPPED"
+    OTHER = "OTHER"
+
+
 class RecoveryStatus(StrEnum):
     RECOVERED = "RECOVERED"
     NOT_RECOVERED = "NOT_RECOVERED"

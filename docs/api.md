@@ -347,14 +347,62 @@ Deployment:
   "incidents_deleted": 1,
   "logs_deleted": 36,
   "deployments_deleted": 5,
-  "health_records_deleted": 14
+  "health_records_deleted": 14,
+  "cicd_events_deleted": 3
 }
 ```
 
 Reset never drops or truncates tables, and it only deletes telemetry rows whose `service_name` is
-one of the simulated services.
+one of the simulated services, plus CI/CD events of the demo repository
+(`opspilot-demo/payment-api`). Events from a real configured repository are kept.
 
-## Planned (later phases)
+## Report and live events
 
-`GET /api/incidents/{id}/report` and the live dashboard (Phase 10),
-`WS /ws/incidents/{id}`, `POST /api/webhooks/github`.
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/incidents/{id}/report` | Final report assembled from the stored phase results (no AI call); created once after verification. `404` unknown incident, `409` not verified yet |
+| `WS` | `/ws/incidents/{id}?after=<event id>` | Full event history, then new events as they are committed, plus `incident_status` messages |
+
+## GitHub webhook
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/webhooks/github` | GitHub delivery. Headers `X-GitHub-Event`, `X-GitHub-Delivery`, `X-Hub-Signature-256` (HMAC SHA-256 of the raw body with `GITHUB_WEBHOOK_SECRET`) |
+| `GET` | `/api/webhooks/github/status` | `configured`, `repository`, `service`, `supported_events`, `max_payload_bytes` (never the secret) |
+
+| Status | Meaning |
+| --- | --- |
+| `201` | Recorded (`status: recorded`, normalized `event`) |
+| `200` | Duplicate delivery (`status: duplicate`, the stored event, nothing written) or `ping` (`pong`) |
+| `202` | Ignored: unsupported event, or not the configured `GITHUB_REPOSITORY` |
+| `400` | Missing/invalid `X-GitHub-Event` / `X-GitHub-Delivery`, or body is not a JSON object |
+| `401` | Missing, malformed or invalid signature (message never includes the secret or a digest) |
+| `413` | Body larger than 2 MiB |
+| `422` | Payload does not match the declared event |
+| `503` | `GITHUB_WEBHOOK_SECRET` is not configured |
+
+```json
+{
+  "status": "recorded",
+  "delivery_id": "3f0c…",
+  "event_type": "workflow_run",
+  "reason": null,
+  "event": {
+    "id": 3, "category": "DEPLOYMENT", "repository": "opspilot-demo/payment-api",
+    "workflow_name": "deploy-production", "run_number": 57, "branch": "main",
+    "commit_sha": "e4a7c52d9b1f3a6c8e0f2b4d6a8c1e3f5b7d9a0c", "status": "COMPLETED",
+    "conclusion": "SUCCESS", "service_name": "payment-api", "environment": "production",
+    "version": "v1.8.2", "version_source": "tag", "deployment_id": 12,
+    "occurred_at": "2026-09-30T11:41:45Z", "…": "…"
+  }
+}
+```
+
+## CI/CD events
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/cicd/events` | Newest first. Filters: `repository`, `branch`, `commit_sha` (hex prefix, 4–40), `workflow`, `service`, `category`, `status`, `conclusion`, `since`, `until`; `limit` 1–50 (default 20). Invalid filters → `422` |
+| `GET` | `/api/cicd/events/{id}` | One event (`404` if unknown) |
+
+Setup and normalization rules: [github-webhooks.md](github-webhooks.md).

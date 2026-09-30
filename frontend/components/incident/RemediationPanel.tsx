@@ -9,6 +9,14 @@ import type { EvidenceItem, ExecutionRun, IncidentStatus, RemediationRun } from 
 
 type Decision = "approve" | "reject";
 
+// Display names for the backend-stored approval parameters (read-only; never editable here).
+const PARAM_LABEL: Record<string, string> = {
+  service: "Affected service",
+  from_version: "Current version",
+  to_version: "Target version",
+};
+const PARAM_ORDER = Object.keys(PARAM_LABEL);
+
 export function RemediationPanel({
   run,
   execution,
@@ -77,9 +85,10 @@ export function RemediationPanel({
           <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs text-slate-300">
             {Object.entries(approval.parameters)
               .filter(([key]) => key !== "remediation_run_id")
+              .sort(([a], [b]) => PARAM_ORDER.indexOf(a) - PARAM_ORDER.indexOf(b))
               .map(([key, value]) => (
                 <div key={key} className="contents">
-                  <dt className="text-slate-500">{key}</dt>
+                  <dt className="text-slate-500">{PARAM_LABEL[key] ?? key}</dt>
                   <dd>{str(value)}</dd>
                 </div>
               ))}

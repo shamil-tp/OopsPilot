@@ -78,7 +78,12 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.2, ge=0, le=2)
     llm_max_output_tokens: int = Field(default=2048, ge=1)
 
+    # GitHub webhook (CI/CD telemetry). Without a secret the endpoint rejects every delivery.
     github_webhook_secret: SecretStr | None = None
+    # Optional "owner/repo": when set, deliveries from other repositories are ignored.
+    github_repository: str | None = None
+    # The simulated service that GITHUB_REPOSITORY builds and deploys.
+    github_service: str = "payment-api"
 
     # Agent safety limits.
     max_agent_steps: int = Field(default=8, ge=1)

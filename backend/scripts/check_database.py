@@ -48,6 +48,7 @@ TABLES = (
     "agent_events",
     "approvals",
     "incident_reports",
+    "cicd_events",
 )
 # Marks the throwaway rows; they are rolled back regardless.
 PROBE = "opspilot-db-check"
@@ -74,7 +75,9 @@ async def check_schema(session: AsyncSession) -> bool:
     )
     rls = dict(rows.all())
     missing = [t for t in TABLES if t not in rls]
-    ok &= report("tables", not missing, f"missing: {missing}" if missing else "all 8 present")
+    ok &= report(
+        "tables", not missing, f"missing: {missing}" if missing else f"all {len(TABLES)} present"
+    )
     no_rls = [t for t in TABLES if t in rls and not rls[t]]
     ok &= report("row level security", not no_rls, f"disabled on: {no_rls}" if no_rls else "")
     return ok

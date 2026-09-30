@@ -8,6 +8,7 @@ function snapshot(s: ServiceSnapshot): string {
 /** The stored report rendered as Markdown for download (CLAUDE.md §27 "Download Report"). */
 export function reportMarkdown(r: IncidentReportContent): string {
   const { summary: s, root_cause: rca, remediation, approval, execution, verification: v, outcome } = r;
+  const cicd = r.investigation.evidence.filter((e) => e.source === "cicd");
   const lines = [
     `# Incident report — ${s.reference}: ${s.title}`,
     "",
@@ -32,6 +33,10 @@ export function reportMarkdown(r: IncidentReportContent): string {
     "",
     "Evidence:",
     ...rca.supporting_evidence.map((e) => `- ${e.id}: ${e.fact}`),
+    "",
+    "## CI/CD evidence (GitHub)",
+    "",
+    ...(cicd.length ? cicd.map((e) => `- ${e.id}: ${e.fact}`) : ["- No CI/CD events in the investigation window."]),
     "",
     "## Recommended action",
     "",

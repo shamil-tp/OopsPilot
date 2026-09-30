@@ -9,7 +9,7 @@ from app.schemas.common import UtcDatetime
 from app.schemas.services import DeploymentRead
 
 # "execution" is used by verification (the approved remediation that was executed).
-EvidenceSource = Literal["logs", "health", "deployments", "previous_incidents", "execution"]
+EvidenceSource = Literal["logs", "health", "deployments", "previous_incidents", "cicd", "execution"]
 
 
 class PreviousIncidentRead(BaseModel):
@@ -25,7 +25,9 @@ class EvidenceItem(BaseModel):
     """One deterministic fact collected by a read-only tool. `id` is what findings cite."""
 
     id: str = Field(
-        description="Citation id: L<n> logs, H<n> health, D<n> deployments, P<n> incidents"
+        description=(
+            "Citation id: L<n> logs, H<n> health, D<n> deployments, P<n> incidents, C<n> CI/CD"
+        )
     )
     source: EvidenceSource
     service: str

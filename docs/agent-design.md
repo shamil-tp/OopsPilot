@@ -33,6 +33,7 @@ AWAITING_APPROVAL --approve--> REMEDIATING --(backend executes, simulated)--> VE
 | `get_service_health` | READ_ONLY | allowed (latest, optionally as of a time / with a status) |
 | `get_recent_deployments` | READ_ONLY | allowed (≤ 5) |
 | `get_previous_incidents` | READ_ONLY | allowed (≤ 5) |
+| `get_recent_cicd_events` | READ_ONLY | allowed (known service, window ≤ 24 h, ≤ 10); normalized `cicd_events` only, never GitHub |
 | `rollback_deployment` | REQUIRES_HUMAN_APPROVAL | refused; executed only by the backend approval gate after a human approves |
 | `restart_service` | REQUIRES_HUMAN_APPROVAL | refused (same) |
 
@@ -70,6 +71,7 @@ For an incident detected at T0 on service S:
 | Health | S now, S's last HEALTHY snapshot before T0 (baseline), and S's dependencies now | 2 + dependencies |
 | Deployments | S's deployments at or before T0 | ≤ 3 |
 | Previous incidents | S's earlier incidents (with recorded root cause, if any) | ≤ 3 |
+| CI/CD (`C<n>`) | S's GitHub pushes, workflow runs and deployments in the 2 h before T0 (commit, workflow, status/conclusion, version and its source, whether it became a deployment); commit messages are marked as quoted data | ≤ 5 |
 
 Each item is rendered as one line with a citation id and a time relative to detection. For the
 demo incident the model receives:

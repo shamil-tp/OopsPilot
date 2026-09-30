@@ -5,10 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { CicdEventRow } from "@/components/cicd/CicdEventRow";
 import { Badge, Card, Empty, ErrorNote, ServiceStatusBadge, SeverityBadge, StatusBadge } from "@/components/ui";
 import {
   ApiError,
   getServiceHealth,
+  getWebhookStatus,
+  listCicdEvents,
   listDeployments,
   listIncidents,
   listServices,
@@ -16,7 +19,7 @@ import {
   simulateIncident,
 } from "@/lib/api";
 import { dateTime, num, TERMINAL } from "@/lib/format";
-import type { Deployment, Incident, ServiceHealth, ServiceSummary } from "@/types/api";
+import type { CicdEvent, Deployment, Incident, ServiceHealth, ServiceSummary, WebhookStatus } from "@/types/api";
 
 const REFRESH_MS = 5000;
 
@@ -25,16 +28,20 @@ interface Snapshot {
   services: ServiceSummary[];
   health: Record<string, ServiceHealth | null>;
   deployments: Deployment[];
+  cicd: CicdEvent[];
+  webhook: WebhookStatus;
 }
 
 async function loadSnapshot(): Promise<Snapshot> {
   const [incidents, services] = await Promise.all([listIncidents(), listServices()]);
-  const [healthList, deployments] = await Promise.all([
+  const [healthList, deployments, cicd, webhook] = await Promise.all([
     Promise.all(services.map((s) => getServiceHealth(s.name))),
     listDeployments("payment-api"),
+    listCicdEvents({ limit: 6 }),
+    getWebhookStatus(),
   ]);
   const health = Object.fromEntries(services.map((s, i) => [s.name, healthList[i]]));
-  return { incidents, services, health, deployments };
+  return { incidents, services, health, deployments, cicd, webhook };
 }
 
 export function DashboardConsole() {
@@ -113,13 +120,13 @@ export function DashboardConsole() {
           {busy === "reset" ? "Resetting…" : "Reset demo"}
         </button>
         <span className="text-xs text-slate-500">
-          Simulate deploys payment-api v1.8.2 in the simulated environment; the agents run step by step from the
-          incident page, with a human approval gate before any change.
+          Simulate replays the GitHub push and deploy-production run that ship payment-api v1.8.2, then the failure;
+          the agents run step by step from the incident page, with a human approval gate before any change.
         </span>
       </div>
       {error && <ErrorNote>{error}</ErrorNote>}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card eyebrow="Incidents" title={`Active incidents (${active.length})`} className="lg:col-span-2">
           {!snapshot ? (
             <Empty>Loading…</Empty>
@@ -138,7 +145,7 @@ export function DashboardConsole() {
                     <Badge>{incident.service_name}</Badge>
                     <SeverityBadge severity={incident.severity} />
                     <StatusBadge status={incident.status} />
-                    <span className="w-32 text-right text-xs text-slate-500">{dateTime(incident.created_at)}</span>
+                    <span className="ml-auto text-right text-xs whitespace-nowrap text-slate-500">{dateTime(incident.created_at)}</span>
                   </Link>
                 </li>
               ))}
@@ -152,12 +159,15 @@ export function DashboardConsole() {
           ) : (
             <ul className="space-y-2">
               {snapshot.deployments.map((d, i) => (
-                <li key={`${d.version}-${i}`} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="font-mono text-slate-200">{d.version}</span>
+                <li key={`${d.version}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                  <span className="font-mono text-slate-200">
+                    {d.version}
+                    {d.commit_sha && <span className="ml-2 text-[11px] text-slate-500">{d.commit_sha.slice(0, 7)}</span>}
+                  </span>
                   <Badge tone={d.status === "SUCCEEDED" ? (i === 0 ? "emerald" : "slate") : "rose"}>
                     {i === 0 && d.status === "SUCCEEDED" ? "active" : d.status}
                   </Badge>
-                  <span className="text-xs text-slate-500">{dateTime(d.timestamp)}</span>
+                  <span className="ml-auto text-xs whitespace-nowrap text-slate-500">{dateTime(d.timestamp)}</span>
                 </li>
               ))}
             </ul>
@@ -165,7 +175,8 @@ export function DashboardConsole() {
         </Card>
       </div>
 
-      <Card eyebrow="Environment" title="Services">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card eyebrow="Environment" title="Services" className="lg:col-span-2">
         {!snapshot ? (
           <Empty>Loading…</Empty>
         ) : (
@@ -174,8 +185,8 @@ export function DashboardConsole() {
               const h = snapshot.health[service.name];
               return (
                 <div key={service.name} className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="font-mono text-sm text-slate-100">{service.name}</span>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+                    <span className="font-mono text-sm whitespace-nowrap text-slate-100">{service.name}</span>
                     <ServiceStatusBadge status={h?.status ?? null} />
                   </div>
                   <dl className="grid grid-cols-2 gap-1 text-xs">
@@ -193,7 +204,37 @@ export function DashboardConsole() {
             })}
           </div>
         )}
-      </Card>
+        </Card>
+
+        <Card
+          eyebrow="GitHub"
+          title="CI/CD activity"
+          actions={
+            snapshot && (
+              <Badge tone={snapshot.webhook.configured ? "emerald" : "slate"}>
+                {snapshot.webhook.configured ? "webhook on" : "webhook off"}
+              </Badge>
+            )
+          }
+        >
+          {!snapshot ? (
+            <Empty>Loading…</Empty>
+          ) : snapshot.cicd.length === 0 ? (
+            <Empty>
+              No CI/CD events yet. Simulating the incident replays its GitHub push and deploy-production run; a
+              configured repository delivers to /api/webhooks/github.
+            </Empty>
+          ) : (
+            <ul className="space-y-3">
+              {snapshot.cicd.map((event) => (
+                <li key={event.id}>
+                  <CicdEventRow event={event} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

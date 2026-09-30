@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { CicdEvidencePanel } from "@/components/incident/CicdEvidencePanel";
 import { EventTimeline } from "@/components/incident/EventTimeline";
 import { InvestigationPanel } from "@/components/incident/InvestigationPanel";
 import { LifecycleStepper } from "@/components/incident/LifecycleStepper";
@@ -146,8 +147,9 @@ export function IncidentConsole({ incidentId }: { incidentId: number }) {
 
       {data.report && <ReportPanel report={data.report} />}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-6">
+          <CicdEvidencePanel cicd={data.cicd} investigation={data.investigation} detectedAt={incident.created_at} />
           <InvestigationPanel run={data.investigation} />
           <RootCausePanel run={data.analysis} evidence={evidence} />
           <RemediationPanel

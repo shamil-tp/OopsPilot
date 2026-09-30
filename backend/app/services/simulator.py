@@ -10,6 +10,10 @@ Repeat-safety:
   different runs never interleave into a confusing timeline.
 - `reset_demo` deletes incidents (their runs, events, approvals and reports go with them through
   ON DELETE CASCADE) and the simulated services' telemetry, then seeds a healthy environment.
+- CI/CD: a new simulation replays the demo repository's GitHub deliveries (push, tag, successful
+  deploy-production run) through the webhook ingestion service, so the v1.8.2 deployment arrives
+  as CI/CD evidence. Demo-repository events are simulated telemetry and are cleared with it;
+  events from a real, configured repository are never deleted.
 """
 
 from dataclasses import dataclass
@@ -21,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.models import AgentEvent, Deployment, Incident, LogEntry, ServiceHealth
 from app.models.enums import DeploymentStatus, IncidentStatus
+from app.services import cicd
 from app.services.scenario import (
     INCIDENT_DESCRIPTION,
     INCIDENT_TITLE,
@@ -45,6 +50,7 @@ class ResetResult:
     logs_deleted: int
     deployments_deleted: int
     health_records_deleted: int
+    cicd_events_deleted: int
 
 
 def _now() -> datetime:
@@ -64,13 +70,17 @@ async def find_active_simulation(db: AsyncSession) -> Incident | None:
     )
 
 
-async def _clear_simulated_telemetry(db: AsyncSession) -> tuple[int, int, int]:
-    """Delete telemetry of the simulated services only. Returns (logs, deployments, health)."""
+async def _clear_simulated_telemetry(db: AsyncSession) -> tuple[int, int, int, int]:
+    """Delete telemetry of the simulated services only.
+
+    Returns (logs, deployments, health, demo CI/CD events).
+    """
+    cicd_events = await cicd.clear_demo(db)
     counts = []
     for model in (LogEntry, Deployment, ServiceHealth):
         result = await db.execute(delete(model).where(model.service_name.in_(SERVICE_NAMES)))
         counts.append(result.rowcount or 0)
-    return counts[0], counts[1], counts[2]
+    return counts[0], counts[1], counts[2], cicd_events
 
 
 async def simulate_incident(db: AsyncSession) -> tuple[Incident, bool]:
@@ -119,6 +129,12 @@ async def simulate_incident(db: AsyncSession) -> tuple[Incident, bool]:
         "incident_simulated",
         extra={"incident_id": incident.id, "scenario": SCENARIO_ID, "service": PRIMARY_SERVICE},
     )
+    try:
+        await cicd.replay_demo(db, detected_at)
+    except Exception as exc:  # CI/CD evidence is optional: never fail the simulation over it
+        await db.rollback()
+        await db.refresh(incident)  # rollback expired it; the caller still returns it
+        logger.warning("demo_cicd_replay_failed", extra={"error": type(exc).__name__})
     return incident, True
 
 
@@ -128,7 +144,7 @@ async def reset_demo(db: AsyncSession) -> ResetResult:
         # The table is now empty, so the next incident is INC-001 again. (SQLite reuses ids of
         # deleted rows on its own.)
         await db.execute(text("SELECT setval(pg_get_serial_sequence('incidents', 'id'), 1, false)"))
-    logs, deployments, health = await _clear_simulated_telemetry(db)
+    logs, deployments, health, cicd_events = await _clear_simulated_telemetry(db)
     db.add_all(build_environment(_now(), incident=False).records())
     await db.commit()
 
@@ -137,6 +153,7 @@ async def reset_demo(db: AsyncSession) -> ResetResult:
         logs_deleted=logs,
         deployments_deleted=deployments,
         health_records_deleted=health,
+        cicd_events_deleted=cicd_events,
     )
     logger.info("demo_reset", extra=result.__dict__)
     return result

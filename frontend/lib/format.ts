@@ -17,20 +17,24 @@ export function label(value: string): string {
   return value.replaceAll("_", " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
+// All times are shown in UTC, like the backend's evidence lines, event messages and reports, so the
+// same moment never appears with two different clock times.
+const TIME: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+};
+
 export function time(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-GB", TIME);
 }
 
 export function dateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return `${new Date(iso).toLocaleString("en-GB", { ...TIME, month: "short", day: "numeric" })} UTC`;
 }
 
 export function percent(value: number | null | undefined, digits = 0): string {

@@ -78,11 +78,12 @@ async def start_investigation(db: AsyncSession, incident_id: int) -> tuple[Agent
         )
 
     # Atomic claim: of two concurrent requests, only one moves the incident out of DETECTED.
+    ref = incident.reference  # read before a rollback expires the ORM object
     if not await claim_incident(
         db, incident_id, expected=IncidentStatus.DETECTED, new=IncidentStatus.INVESTIGATING
     ):
         await db.rollback()
-        raise AgentConflictError(f"An investigation of {incident.reference} has already started")
+        raise AgentConflictError(f"An investigation of {ref} has already started")
 
     run = AgentRun(
         incident_id=incident_id, agent_name=AGENT, status=AgentRunStatus.RUNNING, started_at=now()

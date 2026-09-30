@@ -35,6 +35,8 @@ logger = get_logger(__name__)
 TIMELINE_EVENTS = frozenset(
     {
         "incident_created",
+        "cicd_event_recorded",
+        "deployment_detected",
         "agent_started",
         "evidence_found",
         "investigation_completed",

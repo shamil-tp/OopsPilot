@@ -31,6 +31,7 @@ def test_permission_model() -> None:
         "get_service_health",
         "get_recent_deployments",
         "get_previous_incidents",
+        "get_recent_cicd_events",
     }
     assert set(registry.names(ToolPermission.REQUIRES_HUMAN_APPROVAL)) == {
         "rollback_deployment",

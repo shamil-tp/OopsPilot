@@ -1,5 +1,8 @@
 # OpsPilot Demo
 
+A 5–7 minute live demo of one deterministic incident, from GitHub deploy to incident report.
+Jump to: [checklist](#before-you-present-5-minutes-earlier) · [presenter script](#presenter-script-57-minutes) · [emergency recovery](#emergency-recovery).
+
 ## The scenario
 
 A deterministic payment-api incident. Every run tells the same story, anchored to the moment you
@@ -9,9 +12,10 @@ trigger it (shown here as if the incident is detected at 11:44):
 6 days ago   payment-api v1.8.0 deployed
 2 days ago   payment-api v1.8.1 deployed            (healthy since)
 11:34-11:40  normal traffic: payments succeed, /health 200, a few unrelated warnings
-11:41        payment-api v1.8.2 deployment starts
+11:40        GitHub: push to main, commit e4a7c52 "Release payment-api v1.8.2"; tag v1.8.2
+11:41        GitHub Actions deploy-production #57 starts → payment-api v1.8.2 deployment starts
              configuration reloaded (changed keys: database.host, database.pool_size)
-             deployment completes
+             deployment completes; deploy-production #57 SUCCESS (v1.8.2 from the tag)
 11:42        ERROR Database connection failed / timeout / failed to acquire connection
              ERROR POST /payment 500 (repeatedly; some payments still succeed after retries)
 11:43        health DEGRADED: error rate 37%, latency 2800 ms (CPU 43%, memory 68%: unchanged)
@@ -24,11 +28,65 @@ This is evidence that the problem is specific to payment-api's new release, not 
 
 The telemetry never states the root cause. The agents have to infer
 *"database connection failure introduced by v1.8.2"* from the timing and content of the logs,
-deployments, and health snapshots. The remediation (Phase 7) will be a rollback v1.8.2 → v1.8.1.
+deployments, CI/CD events and health snapshots. The remediation is a rollback v1.8.2 → v1.8.1.
 
-## Running it (backend API)
+The GitHub part arrives as real, GitHub-shaped webhook deliveries: **Simulate** replays them
+through the same ingestion service as `POST /api/webhooks/github`, so no GitHub repository or
+secret is needed for the demo. The incident timeline shows them (`cicd_event_recorded`,
+`deployment_detected`), the investigation cites them as `C1`–`C3`, and the incident page's
+*CI/CD evidence* card lines them up with the first database error. To show the real HTTP path,
+set `GITHUB_WEBHOOK_SECRET` and run `python -m scripts.send_github_webhook` (see
+[github-webhooks.md](github-webhooks.md)).
 
-1. Start the backend with Supabase configured (`DATABASE_URL` in `.env`, schema at revision 0003):
+## Before you present (5 minutes earlier)
+
+1. Backend and frontend running (`uvicorn app.main:app --port 8000`, `npm start` or
+   `docker compose up`); `GITHUB_WEBHOOK_SECRET` set in `.env` if you will show the webhook step.
+2. Open http://localhost:3000. The **System status** card must show *Backend API online*,
+   *PostgreSQL connected* and *gemini · gemini-3.1-flash-lite · 4 keys*.
+3. Click **Reset demo** (or `curl -X POST localhost:8000/api/demo/reset`). Expected: *Active
+   incidents (0)*, all three services **HEALTHY**, payment-api **v1.8.1 ACTIVE**, CI/CD activity
+   empty. Reset is deterministic: it always produces exactly this state.
+4. Optional, to show GitHub before the incident: `cd backend && python -m scripts.send_github_webhook`
+   → the dashboard's **CI/CD activity** shows *push to main*, *tag v1.8.2* and
+   *deploy-production #57 SUCCESS v1.8.2*, and v1.8.2 becomes the active deployment.
+5. Close other tabs showing OpsPilot. Keep this document open on a second screen.
+
+Each AI step takes roughly 5–15 s (one Gemini call plus database round trips); fill the wait by
+narrating the live timeline. Measured timings are in [final-qa.md](final-qa.md).
+
+## Presenter script (5–7 minutes)
+
+| Time | Do | Say / point at |
+| --- | --- | --- |
+| 0:00–0:30 | Dashboard on screen | "OpsPilot is an AI incident response and DevOps copilot. It investigates production incidents, identifies the likely cause from evidence, recommends a safe remediation, requires human approval for risky actions, verifies recovery, and writes the incident report." |
+| 0:30–1:00 | Point at the dashboard | Services all **HEALTHY**; payment-api deployments; **CI/CD activity** from GitHub: a push to main, tag v1.8.2 and the `deploy-production` run that shipped v1.8.2 (webhooks are HMAC-verified and stored as normalized telemetry). |
+| 1:00–1:30 | Click **🚨 Simulate Incident** | The incident page opens: **INC-001**, **HIGH**, payment-api, **DETECTED**; "37% of payments fail, p95 latency 2800 ms". The *What changed before the incident* card already lines up the GitHub deploy with the first database error. |
+| 1:30–2:30 | Click **Start investigation** | Live timeline (WebSocket): tools run (logs, health, deployments, previous incidents, CI/CD), evidence found. Findings are *observations* vs *hypotheses*, each with citation chips (hover a chip to see the fact). "It does not ask an LLM 'what's wrong?' — the backend gathers bounded evidence first, and every claim must cite it." |
+| 2:30–3:15 | Click **Run root cause analysis** | Root cause card: deployment/config change → database connection failure → payment API 500s → degraded health; confidence; ruled-out alternatives (database healthy, CPU/memory unchanged); every step cites evidence (`L…`, `D1`, `C3`). |
+| 3:15–4:00 | Click **Propose remediation** | **Roll back payment-api from v1.8.2 to v1.8.1**, risk **MEDIUM**, *Human approval required*. "Risk, approval and the target version come from backend policy and the real deployment history, not from the model. OpsPilot does not perform this risky action by itself — it requires human approval." Point out: nothing on this card is editable; Approve/Reject send no parameters. |
+| 4:00–4:30 | Click **Approve** | Stepper goes **Remediating → Verifying**; execution card: v1.8.2 rolled back, v1.8.1 active, before/after metrics. "The backend re-validated the stored proposal and executed it exactly once." |
+| 4:30–5:00 | Click **Verify recovery** | Six backend checks, all PASS: error rate **37% → 0.8%**, latency **2800 ms → 180 ms**, service **HEALTHY**; stepper shows **RESOLVED**. "The checks decide recovery; the AI only writes the summary." |
+| 5:00–6:00 | Scroll to **Final incident report** | Root cause, CI/CD evidence (GitHub), remediation + human decision, recovery before/after, full timeline, final outcome. Click **Download report (.md)**. "The report is assembled from stored results — no AI call." |
+| 6:00–7:00 | Architecture slide or README diagram | "The AI proposes decisions, but deterministic backend policy and human approval control risky actions." GitHub → webhook → CI/CD telemetry → agents → human approval → execution → verification → report, over one Gemini key pool, PostgreSQL on Supabase, live WebSocket, Docker and GitHub Actions. |
+
+## Emergency recovery
+
+| Symptom | Fix (fastest first) |
+| --- | --- |
+| Dashboard or incident page looks stale | Refresh the page. All state lives in the backend; the page reloads it over REST and reconnects the live stream (badge **LIVE**; **POLLING** means it is refreshing every 3 s over REST). |
+| "Cannot reach the OpsPilot API" | The backend is down: restart `uvicorn` (or `docker compose restart backend`). The open page recovers by itself. |
+| Investigation fails (red message, e.g. AI rate limit) | The incident goes back to **DETECTED**: click **Start investigation** again. If it keeps failing, **Reset demo** and start over. |
+| Root cause analysis fails | The incident stays **INVESTIGATING** and the stored investigation is reused: click **Run root cause analysis** again (no new evidence collection). |
+| Remediation proposal fails | Click **Propose remediation** again; if it still fails, **Reset demo**. |
+| Approval fails or shows a conflict | Refresh (someone may already have decided). Otherwise **Reset demo**. Approving twice never executes twice. |
+| Verification fails | Check the *Execution* card. If the incident is still **VERIFYING**, click **Verify recovery** again; if it is **FAILED**, explain the honest outcome or **Reset demo**. |
+| Gemini unavailable for the whole demo | **Reset demo**, then walk through the dashboard, the CI/CD evidence card and a previously downloaded report; every non-AI part (webhooks, simulation, approval, execution, report) works without Gemini. |
+| Need a clean start right now | `curl -X POST localhost:8000/api/demo/reset` (≈1–2 s), then refresh the dashboard. |
+
+## Appendix: the same flow from the API
+
+1. Start the backend with Supabase configured (`DATABASE_URL` in `.env`, schema at revision 0004):
 
    ```bash
    cd backend
@@ -117,9 +175,9 @@ deployments, and health snapshots. The remediation (Phase 7) will be a rollback 
 
 Or do all of it from Swagger UI at http://localhost:8000/docs.
 
-Simulation and investigation are separate calls on purpose: the demo controls when the agent
-runs, and simulation never spends AI quota. The dashboard (Phase 11) will chain them for the
-"Simulate Incident" button.
+Simulation and investigation are separate calls on purpose: the presenter controls when each
+agent runs, and simulation never spends AI quota (CI/CD ingestion never calls AI either). The
+dashboard has one button per step, shown only when the backend state allows it.
 
 ## Repeating the demo
 
@@ -129,6 +187,7 @@ runs, and simulation never spends AI quota. The dashboard (Phase 11) will chain 
   incident. The simulated services' telemetry is rebuilt around the new time, and earlier
   incidents are kept as history.
 - **Reset** returns everything to the healthy baseline and clears all incidents. The next incident
-  is INC-001 again.
+  is INC-001 again. It also deletes the demo repository's CI/CD events; events from a real
+  configured repository are kept.
 
 > The Supabase database is shared by the team: a reset clears everyone's demo incidents.
