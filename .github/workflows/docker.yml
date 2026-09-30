@@ -1,0 +1,46 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # CI never connects to Supabase. Point the backend at an unreachable host to check that it
+      # boots and reports the database outage instead of crashing or falling back.
+      - name: Create CI .env
+        run: echo "DATABASE_URL=postgresql+asyncpg://ci:ci@db.invalid:5432/none" > .env
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up --detach
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 30); do
+            curl --silent --output /dev/null http://localhost:8000/docs && break
+            sleep 2
+          done
+          status=$(curl --silent --output health.json --write-out '%{http_code}' http://localhost:8000/api/system/health)
+          cat health.json
+          test "$status" = "503"
+          grep -q '"database":{"status":"unavailable"' health.json
+          curl --fail --silent --output /dev/null --retry 10 --retry-delay 2 --retry-all-errors http://localhost:3000
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down
