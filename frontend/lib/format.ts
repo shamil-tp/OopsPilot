@@ -1,6 +1,6 @@
 import type { ActionType, IncidentStatus } from "@/types/api";
 
-/** Backend lifecycle (CLAUDE.md §46), in order. FAILED / ESCALATED are terminal alternatives. */
+/** Backend lifecycle (CLAUDE.md §46), in order. FAILED / ESCALATED are terminal alternatives.. */
 export const LIFECYCLE: IncidentStatus[] = [
   "DETECTED",
   "INVESTIGATING",
