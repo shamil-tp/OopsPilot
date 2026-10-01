@@ -189,7 +189,10 @@ def _clean_repository(repo: str) -> str:
     summary="Add a new monitored project",
     responses={
         400: {"model": ErrorResponse, "description": "Invalid project configuration"},
-        409: {"model": ErrorResponse, "description": "Project or service identifier already exists"},
+        409: {
+            "model": ErrorResponse,
+            "description": "Project or service identifier already exists",
+        },
     },
 )
 async def create_project(
@@ -254,7 +257,9 @@ async def create_project(
     webhook = WebhookInstructions(
         payload_url=payload_url,
         content_type="application/json",
-        secret_configured=bool(settings.github_webhook_secret and settings.github_webhook_secret.get_secret_value()),
+        secret_configured=bool(
+            settings.github_webhook_secret and settings.github_webhook_secret.get_secret_value()
+        ),
         events=["push", "deployment_status"],
         github_setup_url=f"https://github.com/{repo}/settings/hooks/new",
     )
@@ -284,9 +289,9 @@ async def delete_project(name: str, db: DbSession) -> None:
     if project is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Project '{name}' was not found in registered projects (built-in or .env projects cannot be deleted via API)",
+            f"Project '{name}' was not found in registered projects "
+            "(built-in or .env projects cannot be deleted via API)",
         )
     await db.delete(project)
     await db.commit()
     remove_db_service(name)
-

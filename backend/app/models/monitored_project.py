@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Index, String
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, utc_now_column

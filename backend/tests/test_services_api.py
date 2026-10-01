@@ -142,7 +142,10 @@ async def test_create_and_delete_monitored_project(client: AsyncClient) -> None:
     assert body["project"]["name"] == "Acme Storefront"
     assert body["project"]["service"] == "acme-store"
     assert body["project"]["repository"] == "acme-corp/storefront"
-    assert body["webhook"]["github_setup_url"] == "https://github.com/acme-corp/storefront/settings/hooks/new"
+    assert (
+        body["webhook"]["github_setup_url"]
+        == "https://github.com/acme-corp/storefront/settings/hooks/new"
+    )
     assert "/api/webhooks/github" in body["webhook"]["payload_url"]
 
     # Verify project shows up in list
@@ -160,4 +163,3 @@ async def test_create_and_delete_monitored_project(client: AsyncClient) -> None:
     # Verify no longer in list
     projects_after = (await client.get("/api/services/projects")).json()
     assert not any(p["service"] == "acme-store" for p in projects_after["projects"])
-

@@ -80,14 +80,17 @@ class WebhookInstructions(BaseModel):
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100, description="Project display name")
     service: str | None = Field(
-        default=None, max_length=64, description="Service slug (e.g. 'my-api'); auto-derived if omitted"
+        default=None,
+        max_length=64,
+        description="Service slug (e.g. 'my-api'); auto-derived if omitted",
     )
     url: str | None = Field(default=None, max_length=300, description="Health check endpoint URL")
-    repository: str = Field(min_length=3, max_length=140, description="GitHub repository 'owner/repo'")
+    repository: str = Field(
+        min_length=3, max_length=140, description="GitHub repository 'owner/repo'"
+    )
     environment: str = Field(default="production", max_length=32)
 
 
 class ProjectCreateResponse(BaseModel):
     project: ProjectRead
     webhook: WebhookInstructions
-

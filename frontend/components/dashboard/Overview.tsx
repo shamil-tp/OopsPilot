@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { CicdTable } from "@/components/cicd/CicdTable";
-import { issueSummary } from "@/components/code-review/Findings";
+import { CodeRiskBadge, codeRisk, issueSummary } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
 import { AddProjectModal } from "@/components/projects/AddProjectModal";
 import {
@@ -112,6 +112,7 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
   const allDeployments = Object.values(snapshot.deployments).flat();
   const latest = allDeployments.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0];
   const [onlyService] = Object.keys(snapshot.deployments);
+  const atRisk = snapshot.services.filter((s) => codeRisk(snapshot.reviews[s.name]));
 
   let tone: Tone = "ok";
   let headline = "All services operational";
@@ -121,6 +122,10 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
   } else if (degraded.length > 0) {
     tone = "warn";
     headline = `${degraded.map((s) => (s.kind === "real" ? s.display_name : s.name)).join(", ")} degraded`;
+  } else if (atRisk.length > 0) {
+    // The servers answer, but the latest push of these projects may break them in the browser.
+    tone = "critical";
+    headline = `Online, but ${atRisk.map((s) => s.display_name).join(", ")} ${atRisk.length === 1 ? "has" : "have"} a serious code issue`;
   }
 
   const facts = [
@@ -143,6 +148,14 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
               {active[0].reference}
             </Link>{" "}
             · {active[0].service_name} · <StatusIndicator status={active[0].status} />
+          </p>
+        )}
+        {!active[0] && degraded.length === 0 && atRisk[0] && (
+          <p className="text-sm text-muted">
+            Health checks pass, but the latest push may break the page in the browser.{" "}
+            <Link href={`/code-reviews/${snapshot.reviews[atRisk[0].name].id}`} className="text-ink underline underline-offset-2">
+              See the review
+            </Link>
           </p>
         )}
       </div>
@@ -214,7 +227,12 @@ function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
                   </span>
                 </td>
                 <td className={table.td}>
-                  {h ? <ServiceStatusIndicator status={h.status} /> : <Indicator tone="neutral">Not checked yet</Indicator>}
+                  <span className="flex flex-col items-start gap-0.5">
+                    {h ? <ServiceStatusIndicator status={h.status} /> : <Indicator tone="neutral">Not checked yet</Indicator>}
+                    <span className="text-xs">
+                      <CodeRiskBadge review={snapshot.reviews[service.name]} />
+                    </span>
+                  </span>
                 </td>
                 <td className={`${table.td} ${table.mono} text-right whitespace-nowrap`}>{num(h?.latency_ms, " ms")}</td>
                 <td className={`${table.td} ${table.mono} hidden text-right sm:table-cell ${h && h.error_rate > 0 ? "text-red-700" : ""}`}>

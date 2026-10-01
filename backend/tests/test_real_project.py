@@ -446,6 +446,46 @@ async def test_every_project_is_health_checked_and_one_failure_does_not_block_ot
     assert rows == {SERVICE: ServiceStatus.DOWN, EDTECH: ServiceStatus.HEALTHY}
 
 
+async def test_projects_added_by_another_backend_are_checked_without_a_restart(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two backends share one database: a project registered through one must reach the other."""
+    from app.models.monitored_project import MonitoredProject as ProjectRow
+    from app.services import service_catalog
+
+    name = "added-elsewhere"
+    service_catalog.set_db_services([])  # this backend started before the project existed
+    db.add(
+        ProjectRow(
+            name="Added elsewhere", service=name, url="https://added.example", repository="o/added"
+        )
+    )
+    await db.commit()
+
+    async def stop_after_one_round(_: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        health_probe, "new_client", lambda: transport(lambda _: httpx.Response(200))
+    )
+    monkeypatch.setattr(health_probe.asyncio, "sleep", stop_after_one_round)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await health_probe.run_forever()
+        assert get_service(name) is not None
+        checked = await db.scalar(
+            select(func.count())
+            .select_from(ServiceHealth)
+            .where(ServiceHealth.service_name == name)
+        )
+        assert checked == 1
+    finally:
+        await db.execute(delete(ServiceHealth).where(ServiceHealth.service_name == name))
+        await db.execute(delete(ProjectRow).where(ProjectRow.service == name))
+        await db.commit()
+        service_catalog.set_db_services([])
+
+
 async def test_health_history_is_bounded_and_newest_first(
     client: AsyncClient, db: AsyncSession, real: None
 ) -> None:

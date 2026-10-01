@@ -34,6 +34,31 @@ export function issueSummary(review: CodeReview): { text: string; tone: Tone } {
   };
 }
 
+/**
+ * Critical or high findings in a project's latest reviewed push. Health checks only see the
+ * server's response, so a change that crashes in the browser (the page still loads with HTTP 200)
+ * shows up here rather than as DOWN. A later push without such findings clears it.
+ */
+export function codeRisk(review: CodeReview | undefined): { severity: FindingSeverity; count: number } | null {
+  if (!review || review.status !== "COMPLETED") return null;
+  const serious = review.findings.filter((f) => f.severity === "critical" || f.severity === "high");
+  if (serious.length === 0) return null;
+  return { severity: serious.some((f) => f.severity === "critical") ? "critical" : "high", count: serious.length };
+}
+
+/** "Critical code issue", linked to the review; nothing when the latest push is clean. */
+export function CodeRiskBadge({ review }: { review: CodeReview | undefined }) {
+  const risk = codeRisk(review);
+  if (!risk || !review) return null;
+  return (
+    <Link href={`/code-reviews/${review.id}`} className="hover:underline" title="Found in the latest reviewed push">
+      <Indicator tone="critical">
+        {risk.severity === "critical" ? "Critical" : "High-risk"} code issue{risk.count === 1 ? "" : "s"}
+      </Indicator>
+    </Link>
+  );
+}
+
 export function fileUrl(review: CodeReview, finding: ReviewFinding): string {
   const path = finding.file.split("/").map(encodeURIComponent).join("/");
   return `https://github.com/${review.repository}/blob/${review.commit_sha}/${path}${finding.line ? `#L${finding.line}` : ""}`;

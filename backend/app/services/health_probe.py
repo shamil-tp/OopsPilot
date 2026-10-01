@@ -27,7 +27,7 @@ from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models import ServiceHealth
 from app.models.enums import ServiceStatus
-from app.services.service_catalog import MonitoredService, real_services
+from app.services.service_catalog import MonitoredService, real_services, sync_from_db
 
 logger = get_logger(__name__)
 
@@ -118,6 +118,9 @@ async def run_forever(session_factory: async_sessionmaker[AsyncSession] = Sessio
     )
     async with new_client() as client:
         while True:
+            # Projects added or deleted through another backend (e.g. the server, while this one
+            # runs locally on the same database) appear here within one interval, without a restart.
+            await sync_from_db(session_factory)
             targets = [service for service in real_services() if service.url]
             for service in targets:  # one failing project never blocks the others
                 try:

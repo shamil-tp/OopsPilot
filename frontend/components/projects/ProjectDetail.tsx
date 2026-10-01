@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CicdTable } from "@/components/cicd/CicdTable";
-import { FindingList, ReviewTable } from "@/components/code-review/Findings";
+import { codeRisk, FindingList, ReviewTable } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
 import {
   Button,
@@ -105,7 +105,10 @@ export function ProjectDetail({ service }: { service: string }) {
   const openIncidents = data.incidents.filter((i) => !TERMINAL.includes(i.status));
   const version = data.deployments.find((d) => d.status === "SUCCEEDED")?.version;
   const repo = data.project?.repository ?? null;
-  const tone: Tone = latest ? (STATUS_TONE[latest.status] ?? "neutral") : "neutral";
+  const risk = codeRisk(reviewed);
+  const healthTone: Tone = latest ? (STATUS_TONE[latest.status] ?? "neutral") : "neutral";
+  // A serious code issue outranks a passing health check: the page can load (HTTP 200) and still crash.
+  const tone: Tone = risk && healthTone === "ok" ? "critical" : healthTone;
 
   return (
     <div className="flex flex-col gap-8">
@@ -167,6 +170,13 @@ export function ProjectDetail({ service }: { service: string }) {
             {openIncidents.length > 0 && ` · ${openIncidents.length} open incident${openIncidents.length === 1 ? "" : "s"}`}
           </p>
           {latest && <p className="text-sm text-muted">last check {dateTime(latest.timestamp)}</p>}
+          {risk && (
+            <p className="w-full text-sm text-red-800">
+              {risk.severity === "critical" ? "Critical" : "High-risk"} code issue in the latest push (
+              {reviewed?.commit_sha.slice(0, 7)}). The server still responds, so health checks pass, but the page may
+              fail in the browser. See Code issues below.
+            </p>
+          )}
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-4">
           {[

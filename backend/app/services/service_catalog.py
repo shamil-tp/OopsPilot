@@ -70,7 +70,7 @@ def remove_db_service(name: str) -> None:
 
 
 def real_services() -> tuple[MonitoredService, ...]:
-    """Every configured real application (MONITORED_PROJECTS in .env plus DB-registered projects)."""
+    """Every real application: MONITORED_PROJECTS in .env plus projects registered in the DB."""
     env_projects = {
         project.service: MonitoredService(
             name=project.service,
@@ -109,6 +109,7 @@ def is_demo_service(name: str) -> bool:
 async def sync_from_db(session_factory=None) -> None:
     """Populate the in-memory service catalog with projects from the database."""
     from sqlalchemy import select
+
     from app.db.session import SessionLocal
     from app.models.monitored_project import MonitoredProject
 
@@ -116,19 +117,20 @@ async def sync_from_db(session_factory=None) -> None:
     try:
         async with factory() as db:
             rows = await db.scalars(select(MonitoredProject).order_by(MonitoredProject.id.asc()))
-            set_db_services([
-                MonitoredService(
-                    name=p.service,
-                    display_name=p.name,
-                    description=f"{p.name} ({p.environment})",
-                    kind="real",
-                    url=p.url,
-                    repository=p.repository,
-                    environment=p.environment,
-                )
-                for p in rows
-                if p.service not in DEMO_SERVICE_NAMES
-            ])
+            set_db_services(
+                [
+                    MonitoredService(
+                        name=p.service,
+                        display_name=p.name,
+                        description=f"{p.name} ({p.environment})",
+                        kind="real",
+                        url=p.url,
+                        repository=p.repository,
+                        environment=p.environment,
+                    )
+                    for p in rows
+                    if p.service not in DEMO_SERVICE_NAMES
+                ]
+            )
     except Exception as exc:
         logger.warning("sync_projects_failed", extra={"error": type(exc).__name__})
-
