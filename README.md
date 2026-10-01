@@ -166,7 +166,7 @@ python -m scripts.check_database
 ```
 
 Alternatively, paste [`docs/supabase-schema.sql`](docs/supabase-schema.sql) into the Supabase SQL
-Editor. It creates exactly the same schema and records revision `0004` for Alembic. Use one
+Editor. It creates exactly the same schema and records revision `0005` for Alembic. Use one
 method or the other, not both.
 
 `check_database` verifies the connection, the Alembic revision, that all 9 tables exist with RLS
@@ -280,7 +280,10 @@ All configuration comes from environment variables; see [`.env.example`](.env.ex
 | `AI_PROVIDER` | `gemini` (Ollama + Qwen is planned, not implemented) |
 | `MAX_AGENT_STEPS`, `LLM_MAX_RETRIES`, `TOOL_MAX_RETRIES` | Agent loop safety limits (8 / 2 / 2) |
 | `GITHUB_WEBHOOK_SECRET` | Secret for GitHub webhook HMAC SHA-256 signatures; unset = deliveries rejected (503) |
-| `GITHUB_REPOSITORY`, `GITHUB_SERVICE` | Optional repository allowlist (`owner/repo`) and the service it deploys (default `payment-api`) |
+| `GITHUB_REPOSITORY`, `GITHUB_SERVICE` | Optional repository allowlist (`owner/repo`) and the service it deploys (default: `MONITORED_SERVICE`) |
+| `DEMO_MODE` | `true` (default) enables the simulated payment-api scenario; `false` hides and refuses Simulate/Reset for a real deployment |
+| `MONITORED_PROJECT_NAME`, `MONITORED_ENVIRONMENT`, `MONITORED_SERVICE`, `MONITORED_SERVICE_URL` | The real application OpsPilot watches (e.g. `Mallu Typing`, `production`, `mallutyping-web`, `https://mallutyping.nihalt.in`); the backend health-checks the URL |
+| `MONITORED_HEALTH_INTERVAL_SECONDS`, `MONITORED_LATENCY_SLO_MS` | Health-check interval (60 s) and the latency above which a check counts as degraded (3000 ms) |
 | `CORS_ORIGINS` | Comma-separated origins allowed to call the API |
 | `NEXT_PUBLIC_API_URL` | API URL used by the browser (baked in at frontend build time) |
 

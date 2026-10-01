@@ -47,5 +47,6 @@ class ServiceHealth(Base):
     status: Mapped[ServiceStatus] = mapped_column(enum_column(ServiceStatus))
     error_rate: Mapped[float] = mapped_column(Float)
     latency_ms: Mapped[float] = mapped_column(Float)
-    cpu_usage: Mapped[float] = mapped_column(Float)
-    memory_usage: Mapped[float] = mapped_column(Float)
+    # Null when not measured (e.g. a real application checked over HTTP): never invented.
+    cpu_usage: Mapped[float | None] = mapped_column(Float)
+    memory_usage: Mapped[float | None] = mapped_column(Float)

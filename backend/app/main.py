@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,8 @@ from app.api.router import api_router
 from app.core.config import get_settings, redact_database_url
 from app.core.logging import configure_logging, get_logger
 from app.db.session import engine
+from app.services import health_probe
+from app.services.service_catalog import real_service
 from app.websocket.stream import router as websocket_router
 
 settings = get_settings()
@@ -26,9 +29,17 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             "database": redact_database_url(settings.database_url),
             "ai_provider": settings.ai_provider,
             "gemini_keys_configured": len(settings.gemini_api_keys),
+            "demo_mode": settings.demo_mode,
+            "monitored_service": settings.monitored_service,
         },
     )
+    real = real_service()
+    checks = asyncio.create_task(health_probe.run_forever()) if real and real.url else None
     yield
+    if checks is not None:
+        checks.cancel()
+        with suppress(asyncio.CancelledError):
+            await checks
     await close_ai_provider()
     await engine.dispose()
     logger.info("shutdown")

@@ -86,7 +86,7 @@ narrating the live timeline. Measured timings are in [final-qa.md](final-qa.md).
 
 ## Appendix: the same flow from the API
 
-1. Start the backend with Supabase configured (`DATABASE_URL` in `.env`, schema at revision 0004):
+1. Start the backend with Supabase configured (`DATABASE_URL` in `.env`, schema at revision 0005):
 
    ```bash
    cd backend

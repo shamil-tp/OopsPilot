@@ -12,7 +12,7 @@ from app.models.enums import CicdCategory, CicdConclusion, CicdStatus
 from app.schemas.cicd import CicdEventRead
 from app.schemas.common import ErrorResponse
 from app.services import cicd
-from app.services.service_catalog import SERVICE_NAMES
+from app.services.service_catalog import service_names
 
 router = APIRouter(prefix="/cicd", tags=["cicd"])
 
@@ -41,7 +41,7 @@ async def list_cicd_events(
     until: datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> list[CicdEventRead]:
-    if service is not None and service not in SERVICE_NAMES:
+    if service is not None and service not in service_names():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown service '{service}'")
     rows = await cicd.list_events(
         db,

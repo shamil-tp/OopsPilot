@@ -25,7 +25,7 @@ from pydantic import ValidationError
 
 from app.github.payloads import DeploymentStatusPayload, PushPayload, WorkflowRunPayload
 from app.models.enums import CicdCategory, CicdConclusion, CicdStatus
-from app.services.service_catalog import SERVICE_NAMES
+from app.services.service_catalog import service_names
 
 SUPPORTED_EVENTS = ("push", "workflow_run", "deployment_status")
 MAX_CHANGED_FILES = 20
@@ -147,7 +147,7 @@ def github_url(value: str | None) -> str | None:
 
 def _known_service(text: str) -> str | None:
     lowered = text.lower()
-    for name in sorted(SERVICE_NAMES, key=len, reverse=True):
+    for name in sorted(service_names(), key=len, reverse=True):
         if name in lowered:
             return name
     return None
@@ -328,7 +328,7 @@ def _deployment_status(
         ),
         service_name=(
             explicit_service
-            if isinstance(explicit_service, str) and explicit_service in SERVICE_NAMES
+            if isinstance(explicit_service, str) and explicit_service in service_names()
             else repository_service(repository)
         ),
         environment="production" if environment in PRODUCTION_ENVIRONMENTS else environment,

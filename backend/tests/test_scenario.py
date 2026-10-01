@@ -14,7 +14,7 @@ from app.services.scenario import (
     build_environment,
     classify_severity,
 )
-from app.services.service_catalog import SERVICE_NAMES
+from app.services.service_catalog import DEMO_SERVICE_NAMES as SERVICE_NAMES
 
 ANCHOR = datetime(2026, 9, 30, 11, 44, tzinfo=UTC)
 

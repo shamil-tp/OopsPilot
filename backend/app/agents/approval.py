@@ -57,6 +57,7 @@ from app.services.remediation_policy import (
     validate_restart,
     validate_rollback,
 )
+from app.services.service_catalog import is_demo_service
 
 logger = get_logger(__name__)
 
@@ -246,6 +247,14 @@ async def _execute_locked(
         action=approval.action_type,
         parameters=params,
     )
+
+    # OpsPilot can only execute inside the simulation. For a real application an approved action
+    # is carried out by an operator; nothing here may pretend it happened.
+    if not is_demo_service(service or incident.service_name):
+        raise PolicyViolationError(
+            f"{service or incident.service_name} is a real service with no execution integration; "
+            "an operator must perform the approved action"
+        )
 
     # Re-validate the stored, approved parameters against the live deployment data.
     if approval.action_type is ActionType.ROLLBACK_DEPLOYMENT:

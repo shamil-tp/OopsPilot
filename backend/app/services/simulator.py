@@ -6,7 +6,7 @@ Repeat-safety:
   rebuilds the simulated services' telemetry around "now" and creates a new incident; earlier
   incidents are kept as history.
 - Telemetry rows have no incident_id: they describe the environment's current state. Rebuilding
-  replaces only rows of the simulated services (`SERVICE_NAMES`), so logs and deployments from
+  replaces only rows of the simulated services (`DEMO_SERVICE_NAMES`), so logs and deployments from
   different runs never interleave into a confusing timeline.
 - `reset_demo` deletes incidents (their runs, events, approvals and reports go with them through
   ON DELETE CASCADE) and the simulated services' telemetry, then seeds a healthy environment.
@@ -19,7 +19,7 @@ Repeat-safety:
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -37,7 +37,7 @@ from app.services.scenario import (
     restart_logs,
     rollback_logs,
 )
-from app.services.service_catalog import SERVICE_NAMES
+from app.services.service_catalog import DEMO_SERVICE_NAMES
 
 logger = get_logger(__name__)
 
@@ -78,7 +78,7 @@ async def _clear_simulated_telemetry(db: AsyncSession) -> tuple[int, int, int, i
     cicd_events = await cicd.clear_demo(db)
     counts = []
     for model in (LogEntry, Deployment, ServiceHealth):
-        result = await db.execute(delete(model).where(model.service_name.in_(SERVICE_NAMES)))
+        result = await db.execute(delete(model).where(model.service_name.in_(DEMO_SERVICE_NAMES)))
         counts.append(result.rowcount or 0)
     return counts[0], counts[1], counts[2], cicd_events
 
@@ -139,8 +139,12 @@ async def simulate_incident(db: AsyncSession) -> tuple[Incident, bool]:
 
 
 async def reset_demo(db: AsyncSession) -> ResetResult:
-    incidents = await db.execute(delete(Incident))
-    if db.bind.dialect.name == "postgresql":
+    # Only incidents of the simulated services: a real application's incidents are never reset.
+    incidents = await db.execute(
+        delete(Incident).where(Incident.service_name.in_(DEMO_SERVICE_NAMES))
+    )
+    remaining = await db.scalar(select(func.count()).select_from(Incident))
+    if db.bind.dialect.name == "postgresql" and not remaining:
         # The table is now empty, so the next incident is INC-001 again. (SQLite reuses ids of
         # deleted rows on its own.)
         await db.execute(text("SELECT setval(pg_get_serial_sequence('incidents', 'id'), 1, false)"))
@@ -199,6 +203,8 @@ async def apply_rollback(
         .order_by(Deployment.timestamp.desc(), Deployment.id.desc())
         .limit(1)
     )
+    if service not in DEMO_SERVICE_NAMES:  # backstop: never simulate effects on a real service
+        raise LookupError("not a simulated service")
     if current is None or target is None:
         raise LookupError("rollback deployments not found")
 
@@ -236,6 +242,8 @@ async def apply_restart(db: AsyncSession, *, service: str, at: datetime) -> Serv
     A restart does not change configuration, so the simulation does not invent a recovery: the
     service reports the same health as before the restart (verification decides the outcome).
     """
+    if service not in DEMO_SERVICE_NAMES:  # backstop: never simulate effects on a real service
+        raise LookupError("not a simulated service")
     logs = restart_logs(at, service)
     latest = await db.scalar(
         select(ServiceHealth)

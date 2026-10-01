@@ -135,7 +135,7 @@ async def github_webhook_status() -> WebhookStatus:
     return WebhookStatus(
         configured=bool(secret and secret.get_secret_value()),
         repository=settings.github_repository,
-        service=settings.github_service,
+        service=settings.github_service or settings.monitored_service,
         supported_events=["ping", *SUPPORTED_EVENTS],
         max_payload_bytes=MAX_PAYLOAD_BYTES,
     )

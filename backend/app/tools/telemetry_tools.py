@@ -16,7 +16,7 @@ from app.schemas.common import UtcDatetime
 from app.schemas.investigation import PreviousIncidentRead
 from app.schemas.services import DeploymentRead, LogEntryRead, ServiceHealthRead
 from app.services import incidents, telemetry
-from app.services.service_catalog import SERVICE_NAMES
+from app.services.service_catalog import service_names
 from app.tools.registry import ToolPermission, ToolSpec, registry
 
 MAX_LOG_WINDOW = timedelta(minutes=60)
@@ -31,7 +31,7 @@ class _ServiceArgs(BaseModel):
     @field_validator("service")
     @classmethod
     def _known_service(cls, value: str) -> str:
-        if value not in SERVICE_NAMES:
+        if value not in service_names():
             raise ValueError("unknown service")
         return value
 

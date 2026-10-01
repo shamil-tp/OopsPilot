@@ -13,6 +13,7 @@ from app.agents.common import (
     IncidentNotFoundError,
     latest_run,
 )
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.schemas.common import ErrorResponse
 from app.schemas.events import AgentEventRead
@@ -44,6 +45,8 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
     responses={200: {"model": IncidentRead, "description": "Existing active incident returned"}},
 )
 async def simulate_incident(response: Response, db: DbSession) -> IncidentRead:
+    if not get_settings().demo_mode:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Demo mode is disabled (DEMO_MODE=false)")
     incident, created = await simulator.simulate_incident(db)
     if not created:
         response.status_code = status.HTTP_200_OK

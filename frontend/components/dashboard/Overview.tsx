@@ -22,6 +22,7 @@ import {
 } from "@/components/ui";
 import {
   ApiError,
+  getProject,
   getServiceHealth,
   getWebhookStatus,
   listCicdEvents,
@@ -37,6 +38,7 @@ import type {
   Deployment,
   DeploymentStatus,
   Incident,
+  Project,
   ServiceHealth,
   ServiceSummary,
   WebhookStatus,
@@ -48,6 +50,10 @@ const ERROR_RATE_LIMIT = 5;
 const LATENCY_LIMIT_MS = 500;
 
 interface Snapshot {
+  /** Null when the backend has no project support: treated as demo only. */
+  project: Project | null;
+  /** The service whose deployments and version are shown: the real one, else the first. */
+  primary: string | null;
   incidents: Incident[];
   services: ServiceSummary[];
   health: Record<string, ServiceHealth | null>;
@@ -57,15 +63,16 @@ interface Snapshot {
 }
 
 async function loadSnapshot(): Promise<Snapshot> {
-  const [incidents, services] = await Promise.all([listIncidents(), listServices()]);
+  const [incidents, services, project] = await Promise.all([listIncidents(), listServices(), getProject()]);
+  const primary = (services.find((s) => s.kind === "real") ?? services[0])?.name ?? null;
   const [healthList, deployments, cicd, webhook] = await Promise.all([
     Promise.all(services.map((s) => getServiceHealth(s.name))),
-    listDeployments("payment-api"),
+    primary ? listDeployments(primary) : Promise.resolve([]),
     listCicdEvents({ limit: 6 }),
     getWebhookStatus(),
   ]);
   const health = Object.fromEntries(services.map((s, i) => [s.name, healthList[i]]));
-  return { incidents, services, health, deployments, cicd, webhook };
+  return { project, primary, incidents, services, health, deployments, cicd, webhook };
 }
 
 const DEPLOYMENT_TONE: Record<DeploymentStatus, Tone> = {
@@ -93,7 +100,7 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
   const facts = [
     { term: "Active incidents", value: String(active.length) },
     { term: "Healthy services", value: `${snapshot.services.length - degraded.length} / ${snapshot.services.length}` },
-    { term: "payment-api version", value: current?.version ?? "—", mono: true },
+    { term: `${snapshot.primary ?? "Service"} version`, value: current?.version ?? "—", mono: true },
     { term: "Last deployment", value: shortDateTime(snapshot.deployments[0]?.timestamp) },
   ];
 
@@ -176,6 +183,10 @@ export function Overview() {
     }
   }
 
+  const project = snapshot?.project ?? null;
+  // Until the first load, keep demo controls hidden; a backend without project support is demo-only.
+  const demoMode = snapshot ? (project?.demo_mode ?? true) : false;
+  const realService = snapshot?.services.find((s) => s.kind === "real");
   const incidents = snapshot
     ? [...snapshot.incidents].sort(
         (a, b) => Number(TERMINAL.includes(a.status)) - Number(TERMINAL.includes(b.status)),
@@ -186,24 +197,57 @@ export function Overview() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
         <PageHeader
-          title="Overview"
-          description="Simulated production environment: payment-api, auth-api and database."
+          title={project?.name ?? "Overview"}
+          description={
+            project?.name ? (
+              <>
+                {label(project.environment)}
+                {project.url && (
+                  <>
+                    {" · "}
+                    <a href={project.url} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
+                      {project.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  </>
+                )}
+                {project.repository && (
+                  <>
+                    {" · "}
+                    <a
+                      href={`https://github.com/${project.repository}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-ink underline underline-offset-2"
+                    >
+                      {project.repository}
+                    </a>
+                  </>
+                )}
+              </>
+            ) : (
+              "Simulated production environment: payment-api, auth-api and database."
+            )
+          }
           actions={
-            <>
-              <Button variant="quiet" disabled={busy !== null} onClick={() => void reset()}>
-                {busy === "reset" ? "Resetting…" : "Reset demo"}
-              </Button>
-              <Button variant="primary" disabled={busy !== null} onClick={() => void simulate()}>
-                {busy === "simulate" ? "Simulating…" : "Simulate incident"}
-              </Button>
-            </>
+            demoMode && (
+              <>
+                <Button variant="quiet" disabled={busy !== null} onClick={() => void reset()}>
+                  {busy === "reset" ? "Resetting…" : "Reset demo"}
+                </Button>
+                <Button variant="primary" disabled={busy !== null} onClick={() => void simulate()}>
+                  {busy === "simulate" ? "Simulating…" : "Simulate incident"}
+                </Button>
+              </>
+            )
           }
         />
-        <p className="max-w-3xl text-xs text-muted">
-          Simulate incident replays the GitHub push and deploy-production run that ship payment-api v1.8.2, then the
-          failure that follows. Each agent step is started from the incident page, and the rollback waits for human
-          approval.
-        </p>
+        {demoMode && (
+          <p className="max-w-3xl text-xs text-muted">
+            Demo mode: Simulate incident replays the GitHub push and deploy-production run that ship payment-api v1.8.2,
+            then the failure that follows. Each agent step is started from the incident page, and the rollback waits for
+            human approval.
+          </p>
+        )}
         {error && <ErrorNote>{error}</ErrorNote>}
       </div>
 
@@ -223,7 +267,10 @@ export function Overview() {
               )
             }
           >
-            <IncidentTable incidents={incidents.slice(0, 5)} empty="No incidents. Simulate incident to start the demo." />
+            <IncidentTable
+              incidents={incidents.slice(0, 5)}
+              empty={demoMode ? "No incidents. Simulate incident to start the demo." : "No incidents."}
+            />
           </Section>
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
@@ -243,7 +290,12 @@ export function Overview() {
                       const h = snapshot.health[service.name];
                       return (
                         <tr key={service.name}>
-                          <td className={`${table.td} ${table.mono}`}>{service.name}</td>
+                          <td className={`${table.td} ${table.mono}`}>
+                            {service.name}
+                            {service.kind === "demo" && realService && (
+                              <span className="ml-2 font-sans text-xs text-muted">demo</span>
+                            )}
+                          </td>
                           <td className={table.td}>
                             <ServiceStatusIndicator status={h?.status ?? null} />
                           </td>
@@ -263,9 +315,16 @@ export function Overview() {
                   </tbody>
                 </table>
               </div>
+              {realService && (
+                <p className="mt-2 text-xs text-muted">
+                  {realService.name}: measured by an HTTP check of {realService.url ?? "its URL"} every{" "}
+                  {project?.health_check_interval_seconds ?? 60} s. Latency is the check&apos;s response time; error rate is
+                  the share of the last 10 checks that failed.
+                </p>
+              )}
             </Section>
 
-            <Section title="Deployments" aside="payment-api">
+            <Section title="Deployments" aside={snapshot.primary ?? undefined}>
               <div className={table.wrap}>
                 <table className={table.table}>
                   <thead>
@@ -277,6 +336,14 @@ export function Overview() {
                     </tr>
                   </thead>
                   <tbody>
+                    {snapshot.deployments.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className={`${table.td} text-muted`}>
+                          No deployments recorded yet. Production deployments arrive through the GitHub webhook
+                          (Deployment statuses).
+                        </td>
+                      </tr>
+                    )}
                     {snapshot.deployments.map((d, i) => {
                       const active = i === snapshot.deployments.findIndex((x) => x.status === "SUCCEEDED");
                       return (

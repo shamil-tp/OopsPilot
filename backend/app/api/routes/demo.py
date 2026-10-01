@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.schemas.demo import DemoResetResponse
 from app.services import simulator
@@ -15,13 +16,16 @@ router = APIRouter(prefix="/demo", tags=["demo"])
     response_model=DemoResetResponse,
     summary="Reset the demo environment",
     description=(
-        "Deletes all incidents (with their agent runs, events, approvals and reports), the "
-        "simulated services' logs, deployments and health, and the demo repository's CI/CD "
-        "events, then seeds a healthy environment running payment-api v1.8.1. CI/CD events from "
-        "a real configured repository are kept. Never drops or truncates tables."
+        "Deletes the simulated services' incidents (with their agent runs, events, approvals and "
+        "reports), logs, deployments and health, and the demo repository's CI/CD events, then "
+        "seeds a healthy environment running payment-api v1.8.1. The monitored real service's "
+        "incidents and telemetry are never touched. Refused (409) when DEMO_MODE=false. Never "
+        "drops or truncates tables."
     ),
 )
 async def reset_demo(db: Annotated[AsyncSession, Depends(get_db)]) -> DemoResetResponse:
+    if not get_settings().demo_mode:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Demo mode is disabled (DEMO_MODE=false)")
     result = await simulator.reset_demo(db)
     return DemoResetResponse(
         message="Demo reset: all services healthy, no incidents.",

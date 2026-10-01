@@ -54,6 +54,6 @@ class WebhookStatus(BaseModel):
 
     configured: bool = Field(description="A webhook secret is set, so deliveries are accepted")
     repository: str | None = Field(description="Only this repository is accepted, if set")
-    service: str = Field(description="The service the configured repository deploys")
+    service: str | None = Field(description="The service the configured repository deploys")
     supported_events: list[str]
     max_payload_bytes: int

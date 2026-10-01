@@ -4,12 +4,19 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.enums import LogLevel
 from app.schemas.common import ErrorResponse
-from app.schemas.services import DeploymentRead, LogEntryRead, ServiceHealthRead, ServiceSummary
+from app.schemas.services import (
+    DeploymentRead,
+    LogEntryRead,
+    ProjectRead,
+    ServiceHealthRead,
+    ServiceSummary,
+)
 from app.services import telemetry
-from app.services.service_catalog import SERVICES, SimulatedService, get_service
+from app.services.service_catalog import MonitoredService, get_service, real_service, services
 
 router = APIRouter(prefix="/services", tags=["services"])
 
@@ -17,24 +24,24 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 _UNKNOWN_SERVICE = {404: {"model": ErrorResponse, "description": "Unknown service"}}
 
 
-def known_service(name: str) -> SimulatedService:
+def known_service(name: str) -> MonitoredService:
     service = get_service(name)
     if service is None:
-        known = ", ".join(s.name for s in SERVICES)
+        known = ", ".join(s.name for s in services())
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, f"Unknown service '{name}'. Known services: {known}"
         )
     return service
 
 
-Service = Annotated[SimulatedService, Depends(known_service)]
+Service = Annotated[MonitoredService, Depends(known_service)]
 
 
-@router.get("", response_model=list[ServiceSummary], summary="List simulated services")
+@router.get("", response_model=list[ServiceSummary], summary="List monitored services (real first)")
 async def list_services(db: DbSession) -> list[ServiceSummary]:
     latest = await telemetry.latest_health_by_service(db)
     summaries = []
-    for service in SERVICES:
+    for service in services():
         health = latest.get(service.name)
         summaries.append(
             ServiceSummary(
@@ -42,6 +49,8 @@ async def list_services(db: DbSession) -> list[ServiceSummary]:
                 display_name=service.display_name,
                 description=service.description,
                 dependencies=list(service.dependencies),
+                kind=service.kind,
+                url=service.url,
                 status=health.status if health else None,
                 last_health_at=health.timestamp if health else None,
             )
@@ -105,3 +114,18 @@ async def service_deployments(
 ) -> list[DeploymentRead]:
     rows = await telemetry.list_deployments(db, service.name, limit=limit)
     return [DeploymentRead.model_validate(row) for row in rows]
+
+
+@router.get("/project", response_model=ProjectRead, summary="The monitored project (configuration)")
+async def get_project() -> ProjectRead:
+    settings = get_settings()
+    real = real_service()
+    return ProjectRead(
+        name=settings.monitored_project_name if real else None,
+        environment=settings.monitored_environment,
+        service=real.name if real else None,
+        url=real.url if real else None,
+        repository=settings.github_repository,
+        demo_mode=settings.demo_mode,
+        health_check_interval_seconds=settings.monitored_health_interval_seconds,
+    )

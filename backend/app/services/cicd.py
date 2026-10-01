@@ -33,7 +33,7 @@ from app.models.enums import (
     IncidentStatus,
 )
 from app.services.agent_events import EventRecorder
-from app.services.service_catalog import SERVICE_NAMES
+from app.services.service_catalog import service_names
 
 logger = get_logger(__name__)
 
@@ -57,13 +57,15 @@ class IngestResult:
 
 
 def repository_service(repository: str) -> str | None:
-    """The service a repository deploys: the built-in demo repository, or GITHUB_REPOSITORY."""
+    """The service a repository deploys: the built-in demo repository, or GITHUB_REPOSITORY
+    (-> GITHUB_SERVICE, else the monitored real service)."""
     if repository.lower() == DEMO_REPOSITORY:
         return DEMO_SERVICE
     settings = get_settings()
     configured = settings.github_repository
     if configured and repository.lower() == configured.lower():
-        return settings.github_service if settings.github_service in SERVICE_NAMES else None
+        service = settings.github_service or settings.monitored_service
+        return service if service in service_names() else None
     return None
 
 

@@ -2,7 +2,7 @@
 -- OpsPilot — complete database schema for Supabase PostgreSQL
 -- =============================================================================
 --
--- Equivalent to `alembic upgrade head` (migrations 0001 + 0002 + 0003 + 0004). Generated from
+-- Equivalent to `alembic upgrade head` (migrations 0001 through 0005). Generated from
 -- `alembic upgrade head --sql` and annotated. The Alembic migrations in
 -- backend/alembic/versions/ remain the source of truth; regenerate this file
 -- whenever a migration is added:
@@ -12,7 +12,7 @@
 --         alembic upgrade head --sql 2>/dev/null
 --
 -- Use EITHER this script OR `alembic upgrade head` on a database, not both.
--- The script records revision 0004 in `alembic_version`, so Alembic treats the
+-- The script records revision 0005 in `alembic_version`, so Alembic treats the
 -- database as fully migrated and future migrations apply normally.
 --
 -- Safety:
@@ -86,8 +86,8 @@ CREATE TABLE public.service_health (
     status VARCHAR(32) NOT NULL,
     error_rate FLOAT NOT NULL,
     latency_ms FLOAT NOT NULL,
-    cpu_usage FLOAT NOT NULL,
-    memory_usage FLOAT NOT NULL,
+    cpu_usage FLOAT,       -- migration 0005: null when not measured (HTTP health checks)
+    memory_usage FLOAT,
     CONSTRAINT pk_service_health PRIMARY KEY (id)
 );
 
@@ -257,7 +257,7 @@ ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cicd_events ENABLE ROW LEVEL SECURITY;  -- migration 0004
 
 -- Tell Alembic the schema is at the latest migration.
-INSERT INTO public.alembic_version (version_num) VALUES ('0004');
+INSERT INTO public.alembic_version (version_num) VALUES ('0005');
 
 COMMIT;
 
@@ -267,4 +267,4 @@ COMMIT;
 -- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 --   -> 10 rows (9 OpsPilot tables + alembic_version), rowsecurity = true for all
 -- SELECT version_num FROM public.alembic_version;
---   -> 0004
+--   -> 0005

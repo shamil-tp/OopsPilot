@@ -60,8 +60,23 @@ export interface ServiceSummary {
   display_name: string;
   description: string;
   dependencies: string[];
+  /** "real": the monitored application; "demo": the simulated payment-api scenario. */
+  kind: "real" | "demo";
+  /** URL the backend health-checks (real services only). */
+  url: string | null;
   status: ServiceStatus | null;
   last_health_at: string | null;
+}
+
+/** GET /api/services/project: what OpsPilot is watching (no secrets). */
+export interface Project {
+  name: string | null;
+  environment: string;
+  service: string | null;
+  url: string | null;
+  repository: string | null;
+  demo_mode: boolean;
+  health_check_interval_seconds: number;
 }
 
 export interface ServiceHealth {
@@ -70,8 +85,8 @@ export interface ServiceHealth {
   status: ServiceStatus;
   error_rate: number; // percent
   latency_ms: number;
-  cpu_usage: number; // percent
-  memory_usage: number; // percent
+  cpu_usage: number | null; // percent; null when not measured
+  memory_usage: number | null; // percent; null when not measured
 }
 
 export interface LogEntry {

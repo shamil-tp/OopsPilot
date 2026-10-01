@@ -82,13 +82,40 @@ class Settings(BaseSettings):
     github_webhook_secret: SecretStr | None = None
     # Optional "owner/repo": when set, deliveries from other repositories are ignored.
     github_repository: str | None = None
-    # The simulated service that GITHUB_REPOSITORY builds and deploys.
-    github_service: str = "payment-api"
+    # The service GITHUB_REPOSITORY builds and deploys (default: MONITORED_SERVICE).
+    github_service: str | None = None
+
+    # The simulated payment-api scenario (Simulate incident / Reset demo). Turn it off where
+    # OpsPilot watches a real application; the simulation itself stays available for tests.
+    demo_mode: bool = True
+
+    # The real application OpsPilot monitors (optional). Its health is measured by requesting
+    # MONITORED_SERVICE_URL every MONITORED_HEALTH_INTERVAL_SECONDS from the backend.
+    monitored_project_name: str | None = None
+    monitored_environment: str = "production"
+    monitored_service: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
+    monitored_service_url: str | None = Field(default=None, pattern=r"^https?://[^\s]+$")
+    monitored_health_interval_seconds: float = Field(default=60, ge=15)
+    # A check slower than this counts as degraded (cold starts on serverless hosts are slow).
+    monitored_latency_slo_ms: float = Field(default=3000, gt=0)
 
     # Agent safety limits.
     max_agent_steps: int = Field(default=8, ge=1)
     llm_max_retries: int = Field(default=2, ge=0)
     tool_max_retries: int = Field(default=2, ge=0)
+
+    @field_validator(
+        "github_repository",
+        "github_service",
+        "monitored_project_name",
+        "monitored_service",
+        "monitored_service_url",
+        mode="before",
+    )
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        # `MONITORED_SERVICE=` in .env means "not configured", not an invalid empty name.
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("database_url")
     @classmethod
