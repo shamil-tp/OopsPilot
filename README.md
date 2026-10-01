@@ -396,9 +396,13 @@ A 4-person student hackathon team. Roles as defined in [`CLAUDE.md`](CLAUDE.md) 
 
 | Role | Owns |
 | --- | --- |
-| AI / Agents — Gifty Merin Joy| `backend/app/agents/`, `backend/app/ai/`, `backend/app/prompts/` |
-| Backend / DevOps simulation — Ektha M | `backend/app/api/`, `tools/`, `services/`, `models/`, `db/` |
-| Frontend — Shamil T P | `frontend/` |
-| Integration / CI-CD / QA — Nihal T | `.github/`, `docs/`, `docker-compose.yml`, tests |
+| AI / Agents — EveryOne | `backend/app/agents/`, `backend/app/ai/`, `backend/app/prompts/` |
+| Backend / DevOps simulation — EveryOne | `backend/app/api/`, `tools/`, `services/`, `models/`, `db/` |
+| Frontend — Gifty & Ektha | `frontend/` |
+| Integration / CI-CD / QA — Nihal & Shamil | `.github/`, `docs/`, `docker-compose.yml`, tests |
 
+## 📍 Status
 
+All 12 phases are implemented: simulated environment, AI provider and key pool, the four agents,
+human approval and execution, verification, report, real-time dashboard, GitHub webhook and CI/CD
+telemetry, and final QA ([`docs/final-qa.md`](docs/final-qa.md)).
