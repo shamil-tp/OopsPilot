@@ -1,10 +1,11 @@
 """Application settings loaded from environment variables (and an optional .env file)."""
 
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -42,6 +43,23 @@ def normalize_database_url(value: str) -> str:
 def redact_database_url(value: str) -> str:
     """URL safe to log or print: the password is masked."""
     return make_url(value).render_as_string(hide_password=True)
+
+
+_SERVICE_ID = r"^[a-z0-9][a-z0-9-]{1,62}$"
+_URL = r"^https?://[^\s]+$"
+_REPOSITORY = r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+
+
+class MonitoredProject(BaseModel):
+    """One real application OpsPilot watches (an entry of MONITORED_PROJECTS)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    service: str = Field(pattern=_SERVICE_ID, description="Service id inside OpsPilot")
+    url: str | None = Field(default=None, pattern=_URL, description="Health-checked URL")
+    repository: str | None = Field(default=None, pattern=_REPOSITORY, description="owner/repo")
+    environment: str = Field(default="production", max_length=32)
 
 
 class Settings(BaseSettings):
@@ -95,6 +113,10 @@ class Settings(BaseSettings):
     monitored_environment: str = "production"
     monitored_service: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
     monitored_service_url: str | None = Field(default=None, pattern=r"^https?://[^\s]+$")
+    # Several real applications, as JSON, e.g.
+    # [{"name":"Mallu Typing","service":"mallutyping-web","url":"https://...","repository":"o/r"}]
+    # The single-project MONITORED_* settings above still work and are added to this list.
+    monitored_projects: Annotated[list[MonitoredProject], NoDecode] = []
     monitored_health_interval_seconds: float = Field(default=60, ge=15)
     # A check slower than this counts as degraded (cold starts on serverless hosts are slow).
     monitored_latency_slo_ms: float = Field(default=3000, gt=0)
@@ -121,6 +143,37 @@ class Settings(BaseSettings):
     @classmethod
     def _normalize_database_url(cls, value: str) -> str:
         return normalize_database_url(value)
+
+    @field_validator("monitored_projects", mode="before")
+    @classmethod
+    def _parse_projects(cls, value: object) -> object:
+        if isinstance(value, str):
+            return json.loads(value) if value.strip() else []
+        return value
+
+    @model_validator(mode="after")
+    def _unique_services(self) -> "Settings":
+        names = [p.service for p in self.projects]
+        if len(names) != len(set(names)):
+            raise ValueError("each monitored project needs its own service id")
+        return self
+
+    @property
+    def projects(self) -> list[MonitoredProject]:
+        """MONITORED_PROJECTS plus the single-project MONITORED_* settings, if set."""
+        projects = list(self.monitored_projects)
+        if self.monitored_service and all(p.service != self.monitored_service for p in projects):
+            projects.insert(
+                0,
+                MonitoredProject(
+                    name=self.monitored_project_name or self.monitored_service,
+                    service=self.monitored_service,
+                    url=self.monitored_service_url,
+                    repository=self.github_repository,
+                    environment=self.monitored_environment,
+                ),
+            )
+        return projects
 
     @field_validator("cors_origins", mode="before")
     @classmethod

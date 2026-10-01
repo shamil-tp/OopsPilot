@@ -1,6 +1,6 @@
-"""Health checks of the monitored real application (MONITORED_SERVICE / MONITORED_SERVICE_URL).
+"""Health checks of the monitored real applications (MONITORED_PROJECTS / MONITORED_SERVICE).
 
-Every MONITORED_HEALTH_INTERVAL_SECONDS the backend sends one GET to the configured URL (no
+Every MONITORED_HEALTH_INTERVAL_SECONDS the backend sends one GET to each project's URL (no
 credentials, no cookies, 10 s timeout, body not downloaded) and stores one `service_health` row
 with only what it measured:
 
@@ -27,7 +27,7 @@ from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models import ServiceHealth
 from app.models.enums import ServiceStatus
-from app.services.service_catalog import MonitoredService, real_service
+from app.services.service_catalog import MonitoredService, real_services
 
 logger = get_logger(__name__)
 
@@ -108,25 +108,29 @@ async def check(
 
 
 async def run_forever(session_factory: async_sessionmaker[AsyncSession] = SessionLocal) -> None:
-    """Check the monitored service until cancelled (started by the app lifespan)."""
-    service = real_service()
-    if service is None or not service.url:
+    """Check every monitored service with a URL until cancelled (started by the app lifespan)."""
+    targets = [service for service in real_services() if service.url]
+    if not targets:
         return
     settings = get_settings()
     logger.info(
         "health_checks_started",
-        extra={"service": service.name, "interval_s": settings.monitored_health_interval_seconds},
+        extra={
+            "services": [s.name for s in targets],
+            "interval_s": settings.monitored_health_interval_seconds,
+        },
     )
     async with new_client() as client:
         while True:
-            try:
-                async with session_factory() as db:
-                    await check(
-                        db, service, client=client, slo_ms=settings.monitored_latency_slo_ms
+            for service in targets:  # one failing project never blocks the others
+                try:
+                    async with session_factory() as db:
+                        await check(
+                            db, service, client=client, slo_ms=settings.monitored_latency_slo_ms
+                        )
+                except Exception as exc:  # never take the API down; try again next interval
+                    logger.warning(
+                        "health_check_failed",
+                        extra={"service": service.name, "error": type(exc).__name__},
                     )
-            except Exception as exc:  # never take the API down; try again next interval
-                logger.warning(
-                    "health_check_failed",
-                    extra={"service": service.name, "error": type(exc).__name__},
-                )
             await asyncio.sleep(settings.monitored_health_interval_seconds)

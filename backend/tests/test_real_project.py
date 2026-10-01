@@ -1,6 +1,7 @@
 """Real-application monitoring: configuration, service catalog, GitHub mapping, health checks,
 demo-mode switch, and the guarantees that the simulation never touches the real service."""
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -83,13 +84,17 @@ def test_catalog(real: None) -> None:
 
 
 async def test_project_and_services_endpoints(client: AsyncClient, real: None) -> None:
-    project = (await client.get("/api/services/project")).json()
-    assert project == {
-        "name": "Mallu Typing",
-        "environment": "production",
-        "service": SERVICE,
-        "url": "https://mallutyping.example/",
-        "repository": REPO,
+    projects = (await client.get("/api/services/projects")).json()
+    assert projects == {
+        "projects": [
+            {
+                "name": "Mallu Typing",
+                "environment": "production",
+                "service": SERVICE,
+                "url": "https://mallutyping.example/",
+                "repository": REPO,
+            }
+        ],
         "demo_mode": True,
         "health_check_interval_seconds": 60.0,
     }
@@ -106,12 +111,12 @@ async def test_demo_mode_off_hides_and_refuses_the_simulation(
     assert (await client.post("/api/incidents/simulate")).status_code == 409
     assert (await client.post("/api/demo/reset")).status_code == 409
     assert await db.scalar(select(func.count()).select_from(Incident)) == 0
-    assert (await client.get("/api/services/project")).json()["demo_mode"] is False
+    assert (await client.get("/api/services/projects")).json()["demo_mode"] is False
 
 
 async def test_project_without_real_service_is_demo_only(client: AsyncClient) -> None:
-    project = (await client.get("/api/services/project")).json()
-    assert project["name"] is None and project["service"] is None and project["demo_mode"] is True
+    projects = (await client.get("/api/services/projects")).json()
+    assert projects["projects"] == [] and projects["demo_mode"] is True
 
 
 # --- GitHub → real service ----------------------------------------------------------------------
@@ -325,3 +330,117 @@ async def test_simulated_execution_refuses_a_real_service(db: AsyncSession, real
         await simulator.apply_rollback(db, service=SERVICE, from_version="a", to_version="b", at=at)
     with pytest.raises(LookupError, match="not a simulated service"):
         await simulator.apply_restart(db, service=SERVICE, at=at)
+
+
+# --- several projects ---------------------------------------------------------------------------
+
+EDTECH = "edtech-web"
+EDTECH_REPO = "MrNihalT/EdTech"
+
+
+@pytest.fixture
+def two_projects(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config import MonitoredProject
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "github_webhook_secret", SecretStr(SECRET))
+    monkeypatch.setattr(settings, "github_repository", None)
+    monkeypatch.setattr(
+        settings,
+        "monitored_projects",
+        [
+            MonitoredProject(
+                name="Mallu Typing",
+                service=SERVICE,
+                url="https://mallutyping.example/",
+                repository=REPO,
+            ),
+            MonitoredProject(
+                name="EdTech", service=EDTECH, url="https://edtech.example/", repository=EDTECH_REPO
+            ),
+        ],
+    )
+
+
+@pytest.fixture(autouse=True)
+async def clean_edtech(db: AsyncSession) -> None:
+    for model in (Incident, ServiceHealth, Deployment, CicdEvent):
+        await db.execute(delete(model).where(model.service_name == EDTECH))
+    await db.execute(delete(CicdEvent).where(CicdEvent.repository == "someone/else"))
+    await db.commit()
+
+
+async def test_projects_are_listed_and_validated(client: AsyncClient, two_projects: None) -> None:
+    body = (await client.get("/api/services/projects")).json()
+    assert [(p["name"], p["service"], p["repository"]) for p in body["projects"]] == [
+        ("Mallu Typing", SERVICE, REPO),
+        ("EdTech", EDTECH, EDTECH_REPO),
+    ]
+    services = [s["name"] for s in (await client.get("/api/services")).json()]
+    assert services[:2] == [SERVICE, EDTECH]
+    assert (await client.get(f"/api/services/{EDTECH}/health")).status_code == 404  # no check yet
+
+
+async def test_each_repository_maps_to_its_own_project(
+    client: AsyncClient, two_projects: None
+) -> None:
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def deployment(repo: str, deployment_id: int) -> dict[str, Any]:
+        return {
+            "deployment_status": {
+                "state": "success",
+                "environment": "Production",
+                "updated_at": now,
+            },
+            "deployment": {
+                "id": deployment_id,
+                "sha": SHA,
+                "ref": "main",
+                "environment": "Production",
+            },
+            "repository": {"full_name": repo},
+        }
+
+    mallu = (await deliver(client, "deployment_status", deployment(REPO, 1))).json()["event"]
+    edtech = (
+        await deliver(client, "deployment_status", deployment(EDTECH_REPO.lower(), 2))
+    ).json()["event"]
+    other = (await deliver(client, "deployment_status", deployment("someone/else", 3))).json()[
+        "event"
+    ]
+
+    assert (mallu["service_name"], edtech["service_name"], other["service_name"]) == (
+        SERVICE,
+        EDTECH,
+        None,
+    )
+    assert other["deployment_id"] is None  # stored as GitHub activity, attached to no project
+    for service in (SERVICE, EDTECH):
+        deployments = (await client.get(f"/api/services/{service}/deployments")).json()
+        assert [d["commit_sha"] for d in deployments] == [SHA]
+
+
+async def test_every_project_is_health_checked_and_one_failure_does_not_block_others(
+    db: AsyncSession, two_projects: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "mallutyping.example":
+            raise httpx.ConnectError("refused", request=request)
+        return httpx.Response(200)
+
+    async def stop_after_one_round(_: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(health_probe, "new_client", lambda: transport(handler))
+    monkeypatch.setattr(health_probe.asyncio, "sleep", stop_after_one_round)
+    with pytest.raises(asyncio.CancelledError):
+        await health_probe.run_forever()
+
+    rows = {
+        row.service_name: row.status
+        for row in await db.scalars(
+            select(ServiceHealth).where(ServiceHealth.service_name.in_([SERVICE, EDTECH]))
+        )
+    }
+    assert rows == {SERVICE: ServiceStatus.DOWN, EDTECH: ServiceStatus.HEALTHY}

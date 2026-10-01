@@ -57,11 +57,14 @@ class IngestResult:
 
 
 def repository_service(repository: str) -> str | None:
-    """The service a repository deploys: the built-in demo repository, or GITHUB_REPOSITORY
-    (-> GITHUB_SERVICE, else the monitored real service)."""
+    """The service a repository deploys: the project in MONITORED_PROJECTS with that repository,
+    the built-in demo repository, or GITHUB_REPOSITORY (-> GITHUB_SERVICE / MONITORED_SERVICE)."""
+    settings = get_settings()
+    for project in settings.projects:
+        if project.repository and project.repository.lower() == repository.lower():
+            return project.service if project.service in service_names() else None
     if repository.lower() == DEMO_REPOSITORY:
         return DEMO_SERVICE
-    settings = get_settings()
     configured = settings.github_repository
     if configured and repository.lower() == configured.lower():
         service = settings.github_service or settings.monitored_service

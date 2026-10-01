@@ -52,14 +52,18 @@ class DeploymentRead(BaseModel):
 
 
 class ProjectRead(BaseModel):
-    """What OpsPilot is watching (non-sensitive configuration only)."""
+    """One monitored real application (non-sensitive configuration only)."""
 
-    name: str | None = Field(
-        description="MONITORED_PROJECT_NAME; null when only the demo is set up"
-    )
+    name: str
     environment: str
-    service: str | None
-    url: str | None
-    repository: str | None = Field(description="GitHub repository whose webhooks are accepted")
+    service: str
+    url: str | None = Field(description="Health-checked URL")
+    repository: str | None = Field(description="GitHub repository mapped to this project")
+
+
+class ProjectsRead(BaseModel):
+    """What OpsPilot is watching."""
+
+    projects: list[ProjectRead] = Field(description="Empty when only the demo is set up")
     demo_mode: bool = Field(description="Simulate incident / Reset demo are available")
     health_check_interval_seconds: float

@@ -8,7 +8,7 @@ import type {
   Deployment,
   ExecutionRun,
   Incident,
-  Project,
+  Projects,
   IncidentReport,
   InvestigationRun,
   RemediationRun,
@@ -90,7 +90,7 @@ export async function getSystemHealth(): Promise<SystemHealth> {
 
 export const listServices = () => getJson<ServiceSummary[]>("/api/services");
 // Optional so a backend without project support (older deployment) still shows the demo.
-export const getProject = () => getOptional<Project>("/api/services/project");
+export const getProjects = () => getOptional<Projects>("/api/services/projects");
 export const getServiceHealth = (name: string) =>
   getOptional<ServiceHealth>(`/api/services/${encodeURIComponent(name)}/health`);
 export const listDeployments = (name: string) =>

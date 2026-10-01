@@ -12,11 +12,12 @@ from app.schemas.services import (
     DeploymentRead,
     LogEntryRead,
     ProjectRead,
+    ProjectsRead,
     ServiceHealthRead,
     ServiceSummary,
 )
 from app.services import telemetry
-from app.services.service_catalog import MonitoredService, get_service, real_service, services
+from app.services.service_catalog import MonitoredService, get_service, real_services, services
 
 router = APIRouter(prefix="/services", tags=["services"])
 
@@ -116,16 +117,22 @@ async def service_deployments(
     return [DeploymentRead.model_validate(row) for row in rows]
 
 
-@router.get("/project", response_model=ProjectRead, summary="The monitored project (configuration)")
-async def get_project() -> ProjectRead:
+@router.get(
+    "/projects", response_model=ProjectsRead, summary="The monitored projects (configuration)"
+)
+async def list_projects() -> ProjectsRead:
     settings = get_settings()
-    real = real_service()
-    return ProjectRead(
-        name=settings.monitored_project_name if real else None,
-        environment=settings.monitored_environment,
-        service=real.name if real else None,
-        url=real.url if real else None,
-        repository=settings.github_repository,
+    return ProjectsRead(
+        projects=[
+            ProjectRead(
+                name=service.display_name,
+                environment=service.environment,
+                service=service.name,
+                url=service.url,
+                repository=service.repository,
+            )
+            for service in real_services()
+        ],
         demo_mode=settings.demo_mode,
         health_check_interval_seconds=settings.monitored_health_interval_seconds,
     )

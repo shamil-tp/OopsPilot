@@ -282,6 +282,7 @@ All configuration comes from environment variables; see [`.env.example`](.env.ex
 | `GITHUB_WEBHOOK_SECRET` | Secret for GitHub webhook HMAC SHA-256 signatures; unset = deliveries rejected (503) |
 | `GITHUB_REPOSITORY`, `GITHUB_SERVICE` | Optional repository allowlist (`owner/repo`) and the service it deploys (default: `MONITORED_SERVICE`) |
 | `DEMO_MODE` | `true` (default) enables the simulated payment-api scenario; `false` hides and refuses Simulate/Reset for a real deployment |
+| `MONITORED_PROJECTS` | The real applications OpsPilot watches, as JSON: `[{"name","service","url","repository"}, …]`. Each repo's webhook maps to its project and each URL is health-checked. Link events that arrived before mapping: `python -m scripts.link_cicd_events --apply` |
 | `MONITORED_PROJECT_NAME`, `MONITORED_ENVIRONMENT`, `MONITORED_SERVICE`, `MONITORED_SERVICE_URL` | The real application OpsPilot watches (e.g. `Mallu Typing`, `production`, `mallutyping-web`, `https://mallutyping.nihalt.in`); the backend health-checks the URL |
 | `MONITORED_HEALTH_INTERVAL_SECONDS`, `MONITORED_LATENCY_SLO_MS` | Health-check interval (60 s) and the latency above which a check counts as degraded (3000 ms) |
 | `CORS_ORIGINS` | Comma-separated origins allowed to call the API |

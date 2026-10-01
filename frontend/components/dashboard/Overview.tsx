@@ -22,7 +22,7 @@ import {
 } from "@/components/ui";
 import {
   ApiError,
-  getProject,
+  getProjects,
   getServiceHealth,
   getWebhookStatus,
   listCicdEvents,
@@ -38,7 +38,7 @@ import type {
   Deployment,
   DeploymentStatus,
   Incident,
-  Project,
+  Projects,
   ServiceHealth,
   ServiceSummary,
   WebhookStatus,
@@ -51,28 +51,36 @@ const LATENCY_LIMIT_MS = 500;
 
 interface Snapshot {
   /** Null when the backend has no project support: treated as demo only. */
-  project: Project | null;
-  /** The service whose deployments and version are shown: the real one, else the first. */
-  primary: string | null;
+  projects: Projects | null;
   incidents: Incident[];
   services: ServiceSummary[];
   health: Record<string, ServiceHealth | null>;
-  deployments: Deployment[];
+  /** Newest first, per service. */
+  deployments: Record<string, Deployment[]>;
   cicd: CicdEvent[];
   webhook: WebhookStatus;
 }
 
 async function loadSnapshot(): Promise<Snapshot> {
-  const [incidents, services, project] = await Promise.all([listIncidents(), listServices(), getProject()]);
-  const primary = (services.find((s) => s.kind === "real") ?? services[0])?.name ?? null;
-  const [healthList, deployments, cicd, webhook] = await Promise.all([
+  const [incidents, services, projects] = await Promise.all([listIncidents(), listServices(), getProjects()]);
+  const real = services.filter((s) => s.kind === "real");
+  // Deployment history: every real project, or the demo's payment-api when there is none.
+  const tracked = real.length > 0 ? real.map((s) => s.name) : services.slice(0, 1).map((s) => s.name);
+  const [healthList, deploymentLists, cicd, webhook] = await Promise.all([
     Promise.all(services.map((s) => getServiceHealth(s.name))),
-    primary ? listDeployments(primary) : Promise.resolve([]),
-    listCicdEvents({ limit: 6 }),
+    Promise.all(tracked.map((name) => listDeployments(name))),
+    listCicdEvents({ limit: 8 }),
     getWebhookStatus(),
   ]);
-  const health = Object.fromEntries(services.map((s, i) => [s.name, healthList[i]]));
-  return { project, primary, incidents, services, health, deployments, cicd, webhook };
+  return {
+    projects,
+    incidents,
+    services,
+    health: Object.fromEntries(services.map((s, i) => [s.name, healthList[i]])),
+    deployments: Object.fromEntries(tracked.map((name, i) => [name, deploymentLists[i]])),
+    cicd,
+    webhook,
+  };
 }
 
 const DEPLOYMENT_TONE: Record<DeploymentStatus, Tone> = {
@@ -82,10 +90,16 @@ const DEPLOYMENT_TONE: Record<DeploymentStatus, Tone> = {
   ROLLED_BACK: "warn",
 };
 
+const currentVersion = (deployments: Deployment[] | undefined) =>
+  deployments?.find((d) => d.status === "SUCCEEDED")?.version ?? "—";
+
 function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
   const active = snapshot.incidents.filter((i) => !TERMINAL.includes(i.status));
   const degraded = snapshot.services.filter((s) => snapshot.health[s.name]?.status !== "HEALTHY");
-  const current = snapshot.deployments.find((d) => d.status === "SUCCEEDED");
+  const projectCount = snapshot.services.filter((s) => s.kind === "real").length;
+  const allDeployments = Object.values(snapshot.deployments).flat();
+  const latest = allDeployments.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0];
+  const [onlyService] = Object.keys(snapshot.deployments);
 
   let tone: Tone = "ok";
   let headline = "All services operational";
@@ -94,14 +108,16 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
     headline = `${active.length} active incident${active.length === 1 ? "" : "s"}`;
   } else if (degraded.length > 0) {
     tone = "warn";
-    headline = `${degraded.map((s) => s.name).join(", ")} degraded`;
+    headline = `${degraded.map((s) => (s.kind === "real" ? s.display_name : s.name)).join(", ")} degraded`;
   }
 
   const facts = [
     { term: "Active incidents", value: String(active.length) },
     { term: "Healthy services", value: `${snapshot.services.length - degraded.length} / ${snapshot.services.length}` },
-    { term: `${snapshot.primary ?? "Service"} version`, value: current?.version ?? "—", mono: true },
-    { term: "Last deployment", value: shortDateTime(snapshot.deployments[0]?.timestamp) },
+    projectCount > 1
+      ? { term: "Projects", value: String(projectCount) }
+      : { term: `${onlyService ?? "Service"} version`, value: currentVersion(snapshot.deployments[onlyService]), mono: true },
+    { term: "Last deployment", value: latest ? `${shortDateTime(latest.timestamp)} · ${latest.service_name}` : "—" },
   ];
 
   return (
@@ -120,13 +136,85 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-4">
         {facts.map((fact) => (
-          <div key={fact.term}>
+          <div key={fact.term} className="min-w-0">
             <dt className="text-xs text-muted">{fact.term}</dt>
-            <dd className={`mt-0.5 text-[15px] font-medium text-ink ${fact.mono ? "font-mono" : ""}`}>{fact.value}</dd>
+            <dd className={`mt-0.5 truncate text-[15px] font-medium text-ink ${fact.mono ? "font-mono" : ""}`}>
+              {fact.value}
+            </dd>
           </div>
         ))}
       </dl>
     </Panel>
+  );
+}
+
+const host = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
+  const real = snapshot.services.filter((s) => s.kind === "real");
+  const repos = new Map((snapshot.projects?.projects ?? []).map((p) => [p.service, p.repository]));
+  return (
+    <div className={table.wrap}>
+      <table className={table.table}>
+        <thead>
+          <tr>
+            <th scope="col" className={table.th}>Project</th>
+            <th scope="col" className={table.th}>Status</th>
+            <th scope="col" className={`${table.th} text-right`}>Latency</th>
+            <th scope="col" className={`${table.th} hidden text-right sm:table-cell`}>Failed checks</th>
+            <th scope="col" className={`${table.th} hidden md:table-cell`}>Version</th>
+            <th scope="col" className={`${table.th} hidden text-right lg:table-cell`}>Last deployed (UTC)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {real.map((service) => {
+            const h = snapshot.health[service.name];
+            const deployments = snapshot.deployments[service.name];
+            const repo = repos.get(service.name);
+            return (
+              <tr key={service.name}>
+                <td className={table.td}>
+                  <span className="font-medium text-ink">{service.display_name}</span>
+                  <span className="block text-xs text-muted">
+                    {service.url ? (
+                      <a href={service.url} target="_blank" rel="noreferrer" className="hover:text-ink hover:underline">
+                        {host(service.url)}
+                      </a>
+                    ) : (
+                      <span className="font-mono">{service.name}</span>
+                    )}
+                    {repo && (
+                      <>
+                        {" · "}
+                        <a
+                          href={`https://github.com/${repo}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono hover:text-ink hover:underline"
+                        >
+                          {repo}
+                        </a>
+                      </>
+                    )}
+                  </span>
+                </td>
+                <td className={table.td}>
+                  {h ? <ServiceStatusIndicator status={h.status} /> : <Indicator tone="neutral">Not checked yet</Indicator>}
+                </td>
+                <td className={`${table.td} ${table.mono} text-right whitespace-nowrap`}>{num(h?.latency_ms, " ms")}</td>
+                <td className={`${table.td} ${table.mono} hidden text-right sm:table-cell ${h && h.error_rate > 0 ? "text-red-700" : ""}`}>
+                  {num(h?.error_rate, "%")}
+                </td>
+                <td className={`${table.td} ${table.mono} hidden md:table-cell`}>{currentVersion(deployments)}</td>
+                <td className={`${table.td} hidden text-right whitespace-nowrap text-muted lg:table-cell`}>
+                  {shortDateTime(deployments?.[0]?.timestamp)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -183,47 +271,56 @@ export function Overview() {
     }
   }
 
-  const project = snapshot?.project ?? null;
+  const projects = snapshot?.projects?.projects ?? [];
   // Until the first load, keep demo controls hidden; a backend without project support is demo-only.
-  const demoMode = snapshot ? (project?.demo_mode ?? true) : false;
-  const realService = snapshot?.services.find((s) => s.kind === "real");
-  const incidents = snapshot
-    ? [...snapshot.incidents].sort(
-        (a, b) => Number(TERMINAL.includes(a.status)) - Number(TERMINAL.includes(b.status)),
-      )
+  const demoMode = snapshot ? (snapshot.projects?.demo_mode ?? true) : false;
+  const demoServices = snapshot?.services.filter((s) => s.kind === "demo") ?? [];
+  const deploymentRows = snapshot
+    ? Object.values(snapshot.deployments)
+        .flat()
+        .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+        .slice(0, 8)
     : [];
+  const severalServices = snapshot ? Object.keys(snapshot.deployments).length > 1 : false;
+  const repositories = new Set(snapshot?.cicd.map((e) => e.repository));
+  const incidents = snapshot
+    ? [...snapshot.incidents].sort((a, b) => Number(TERMINAL.includes(a.status)) - Number(TERMINAL.includes(b.status)))
+    : [];
+  const single = projects.length === 1 ? projects[0] : null;
 
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
         <PageHeader
-          title={project?.name ?? "Overview"}
+          title={single?.name ?? "Overview"}
           description={
-            project?.name ? (
+            single ? (
               <>
-                {label(project.environment)}
-                {project.url && (
+                {label(single.environment)}
+                {single.url && (
                   <>
                     {" · "}
-                    <a href={project.url} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
-                      {project.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    <a href={single.url} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
+                      {host(single.url)}
                     </a>
                   </>
                 )}
-                {project.repository && (
+                {single.repository && (
                   <>
                     {" · "}
                     <a
-                      href={`https://github.com/${project.repository}`}
+                      href={`https://github.com/${single.repository}`}
                       target="_blank"
                       rel="noreferrer"
                       className="font-mono text-ink underline underline-offset-2"
                     >
-                      {project.repository}
+                      {single.repository}
                     </a>
                   </>
                 )}
               </>
+            ) : projects.length > 1 ? (
+              `${projects.length} projects monitored`
             ) : (
               "Simulated production environment: payment-api, auth-api and database."
             )
@@ -252,10 +349,20 @@ export function Overview() {
       </div>
 
       {!snapshot ? (
-        <Empty>Loading environment…</Empty>
+        <Empty>Loading…</Empty>
       ) : (
         <>
           <ProductionStatus snapshot={snapshot} />
+
+          {projects.length > 0 && (
+            <Section title="Projects" aside={`Health checked every ${snapshot.projects?.health_check_interval_seconds ?? 60} s`}>
+              <ProjectsTable snapshot={snapshot} />
+              <p className="mt-2 text-xs text-muted">
+                Each project&apos;s URL is checked over HTTP. Latency is the check&apos;s response time; failed checks
+                is the share of the last 10 checks that did not succeed.
+              </p>
+            </Section>
+          )}
 
           <Section
             title="Incidents"
@@ -274,61 +381,56 @@ export function Overview() {
           </Section>
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-            <Section title="Services">
-              <div className={table.wrap}>
-                <table className={table.table}>
-                  <thead>
-                    <tr>
-                      <th scope="col" className={table.th}>Service</th>
-                      <th scope="col" className={table.th}>Status</th>
-                      <th scope="col" className={`${table.th} text-right`}>Error rate</th>
-                      <th scope="col" className={`${table.th} text-right`}>Latency</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.services.map((service) => {
-                      const h = snapshot.health[service.name];
-                      return (
-                        <tr key={service.name}>
-                          <td className={`${table.td} ${table.mono}`}>
-                            {service.name}
-                            {service.kind === "demo" && realService && (
-                              <span className="ml-2 font-sans text-xs text-muted">demo</span>
-                            )}
-                          </td>
-                          <td className={table.td}>
-                            <ServiceStatusIndicator status={h?.status ?? null} />
-                          </td>
-                          <td
-                            className={`${table.td} ${table.mono} text-right ${h && h.error_rate >= ERROR_RATE_LIMIT ? "text-red-700" : ""}`}
-                          >
-                            {num(h?.error_rate, "%")}
-                          </td>
-                          <td
-                            className={`${table.td} ${table.mono} text-right ${h && h.latency_ms >= LATENCY_LIMIT_MS ? "text-red-700" : ""}`}
-                          >
-                            {num(h?.latency_ms, " ms")}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {realService && (
-                <p className="mt-2 text-xs text-muted">
-                  {realService.name}: measured by an HTTP check of {realService.url ?? "its URL"} every{" "}
-                  {project?.health_check_interval_seconds ?? 60} s. Latency is the check&apos;s response time; error rate is
-                  the share of the last 10 checks that failed.
-                </p>
-              )}
-            </Section>
+            {demoServices.length > 0 && (
+              <Section title={projects.length > 0 ? "Demo services" : "Services"}>
+                <div className={table.wrap}>
+                  <table className={table.table}>
+                    <thead>
+                      <tr>
+                        <th scope="col" className={table.th}>Service</th>
+                        <th scope="col" className={table.th}>Status</th>
+                        <th scope="col" className={`${table.th} text-right`}>Error rate</th>
+                        <th scope="col" className={`${table.th} text-right`}>Latency</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {demoServices.map((service) => {
+                        const h = snapshot.health[service.name];
+                        return (
+                          <tr key={service.name}>
+                            <td className={`${table.td} ${table.mono}`}>{service.name}</td>
+                            <td className={table.td}>
+                              <ServiceStatusIndicator status={h?.status ?? null} />
+                            </td>
+                            <td
+                              className={`${table.td} ${table.mono} text-right ${h && h.error_rate >= ERROR_RATE_LIMIT ? "text-red-700" : ""}`}
+                            >
+                              {num(h?.error_rate, "%")}
+                            </td>
+                            <td
+                              className={`${table.td} ${table.mono} text-right ${h && h.latency_ms >= LATENCY_LIMIT_MS ? "text-red-700" : ""}`}
+                            >
+                              {num(h?.latency_ms, " ms")}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Section>
+            )}
 
-            <Section title="Deployments" aside={snapshot.primary ?? undefined}>
+            <Section
+              title="Deployments"
+              aside={severalServices ? undefined : Object.keys(snapshot.deployments)[0]}
+              className={demoServices.length > 0 ? "" : "lg:col-span-2"}
+            >
               <div className={table.wrap}>
                 <table className={table.table}>
                   <thead>
                     <tr>
+                      {severalServices && <th scope="col" className={`${table.th} hidden sm:table-cell`}>Service</th>}
                       <th scope="col" className={table.th}>Version</th>
                       <th scope="col" className={`${table.th} hidden sm:table-cell`}>Commit</th>
                       <th scope="col" className={table.th}>Status</th>
@@ -336,19 +438,28 @@ export function Overview() {
                     </tr>
                   </thead>
                   <tbody>
-                    {snapshot.deployments.length === 0 && (
+                    {deploymentRows.length === 0 && (
                       <tr>
-                        <td colSpan={4} className={`${table.td} text-muted`}>
-                          No deployments recorded yet. Production deployments arrive through the GitHub webhook
-                          (Deployment statuses).
+                        <td colSpan={5} className={`${table.td} text-muted`}>
+                          No deployments recorded yet. Production deployments arrive through each repository&apos;s
+                          GitHub webhook (Deployment statuses).
                         </td>
                       </tr>
                     )}
-                    {snapshot.deployments.map((d, i) => {
-                      const active = i === snapshot.deployments.findIndex((x) => x.status === "SUCCEEDED");
+                    {deploymentRows.map((d) => {
+                      // The newest successful deployment of its service is the one running.
+                      const active = snapshot.deployments[d.service_name]?.find((x) => x.status === "SUCCEEDED") === d;
                       return (
-                        <tr key={`${d.version}-${d.timestamp}`}>
-                          <td className={`${table.td} ${table.mono} font-medium`}>{d.version}</td>
+                        <tr key={`${d.service_name}-${d.version}-${d.timestamp}`}>
+                          {severalServices && (
+                            <td className={`${table.td} ${table.mono} hidden sm:table-cell`}>{d.service_name}</td>
+                          )}
+                          <td className={`${table.td} ${table.mono} font-medium`}>
+                            {d.version}
+                            {severalServices && (
+                              <span className="block text-xs font-normal text-muted sm:hidden">{d.service_name}</span>
+                            )}
+                          </td>
                           <td className={`${table.td} ${table.mono} hidden text-muted sm:table-cell`}>
                             {d.commit_sha?.slice(0, 7) ?? "—"}
                           </td>
@@ -380,12 +491,9 @@ export function Overview() {
             }
           >
             {snapshot.cicd.length === 0 ? (
-              <Empty>
-                No CI/CD events yet. Simulate incident replays the GitHub deliveries of the demo; a configured
-                repository delivers to /api/webhooks/github.
-              </Empty>
+              <Empty>No CI/CD events yet. Each repository&apos;s GitHub webhook delivers to /api/webhooks/github.</Empty>
             ) : (
-              <CicdTable events={snapshot.cicd} />
+              <CicdTable events={snapshot.cicd} showRepository={repositories.size > 1} />
             )}
           </Section>
         </>

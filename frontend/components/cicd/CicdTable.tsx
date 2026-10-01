@@ -48,10 +48,13 @@ export function CicdTable({
   events,
   context = [],
   cite,
+  showRepository = false,
 }: {
   events: CicdEvent[];
   context?: ContextRow[];
   cite?: (event: CicdEvent) => ReactNode;
+  /** Show which repository each event came from (several projects). */
+  showRepository?: boolean;
 }) {
   const rows: Row[] = [
     ...events.map((event) => ({ at: event.occurred_at, event, cite: cite?.(event) })),
@@ -63,7 +66,9 @@ export function CicdTable({
       <table className={table.table}>
         <thead>
           <tr>
-            <th scope="col" className={table.th}>Time (UTC)</th>
+            <th scope="col" className={table.th}>
+              Time<span className="hidden sm:inline"> (UTC)</span>
+            </th>
             <th scope="col" className={table.th}>Event</th>
             <th scope="col" className={table.th}>Result</th>
             <th scope="col" className={`${table.th} hidden sm:table-cell`}>Version</th>
@@ -78,13 +83,18 @@ export function CicdTable({
                 <td className={table.td}>
                   <span className="font-medium text-ink">{cicdTitle(row.event)}</span>{" "}
                   {row.cite}
+                  {showRepository && (
+                    <span className="block font-mono text-xs break-all text-muted">{row.event.repository}</span>
+                  )}
                   {row.event.commit_message && (
-                    <span className="block max-w-md truncate text-xs text-muted">{row.event.commit_message}</span>
+                    <span className="block max-w-md text-xs break-words text-muted sm:truncate">{row.event.commit_message}</span>
                   )}
                 </td>
                 <td className={table.td}>
                   <Indicator tone={cicdOutcome(row.event).tone}>{cicdOutcome(row.event).text}</Indicator>
-                  {row.event.deployment_id !== null && <span className="block text-xs text-muted">recorded as deployment</span>}
+                  {row.event.deployment_id !== null && (
+                    <span className="hidden text-xs text-muted sm:block">recorded as deployment</span>
+                  )}
                 </td>
                 <td className={`${table.td} ${table.mono} hidden sm:table-cell`}>{row.event.version ?? "—"}</td>
                 <td className={`${table.td} ${table.mono} hidden text-muted md:table-cell`}>

@@ -68,13 +68,18 @@ export interface ServiceSummary {
   last_health_at: string | null;
 }
 
-/** GET /api/services/project: what OpsPilot is watching (no secrets). */
+/** One monitored real application (no secrets). */
 export interface Project {
-  name: string | null;
+  name: string;
   environment: string;
-  service: string | null;
+  service: string;
   url: string | null;
   repository: string | null;
+}
+
+/** GET /api/services/projects: what OpsPilot is watching. */
+export interface Projects {
+  projects: Project[];
   demo_mode: boolean;
   health_check_interval_seconds: number;
 }

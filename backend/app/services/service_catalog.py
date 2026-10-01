@@ -1,8 +1,8 @@
 """The services OpsPilot monitors and investigates.
 
 Two telemetry sources feed the same tables and the same agents:
-- the **real** application configured with MONITORED_SERVICE (health measured by the backend's
-  health checks, deployments from GitHub);
+- the **real** applications configured in MONITORED_PROJECTS (health measured by the backend's
+  health checks, deployments and CI from each project's GitHub repository);
 - the **demo** simulation (payment-api, auth-api, database), available while DEMO_MODE is on and
   always used by the automated tests.
 
@@ -24,6 +24,8 @@ class MonitoredService:
     dependencies: tuple[str, ...] = ()
     kind: Literal["real", "demo"] = "demo"
     url: str | None = None
+    repository: str | None = None
+    environment: str = "production"
 
 
 DEMO_SERVICES: tuple[MonitoredService, ...] = (
@@ -49,26 +51,27 @@ DEMO_SERVICES: tuple[MonitoredService, ...] = (
 DEMO_SERVICE_NAMES: frozenset[str] = frozenset(service.name for service in DEMO_SERVICES)
 
 
-def real_service() -> MonitoredService | None:
-    settings = get_settings()
-    name = settings.monitored_service
-    if not name or name in DEMO_SERVICE_NAMES:
-        return None
-    project = settings.monitored_project_name or name
-    return MonitoredService(
-        name=name,
-        display_name=project,
-        description=f"{project} ({settings.monitored_environment})",
-        kind="real",
-        url=settings.monitored_service_url,
+def real_services() -> tuple[MonitoredService, ...]:
+    """Every configured real application (MONITORED_PROJECTS and/or MONITORED_SERVICE)."""
+    return tuple(
+        MonitoredService(
+            name=project.service,
+            display_name=project.name,
+            description=f"{project.name} ({project.environment})",
+            kind="real",
+            url=project.url,
+            repository=project.repository,
+            environment=project.environment,
+        )
+        for project in get_settings().projects
+        if project.service not in DEMO_SERVICE_NAMES
     )
 
 
 def services() -> tuple[MonitoredService, ...]:
-    """The real service first (if configured), then the demo services (if DEMO_MODE is on)."""
-    real = real_service()
+    """The real services first (if configured), then the demo services (if DEMO_MODE is on)."""
     demo = DEMO_SERVICES if get_settings().demo_mode else ()
-    return ((real,) if real else ()) + demo
+    return real_services() + demo
 
 
 def service_names() -> frozenset[str]:
