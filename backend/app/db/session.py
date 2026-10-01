@@ -14,15 +14,17 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import get_settings
 
-_database_url = get_settings().database_url
+_settings = get_settings()
+_database_url = _settings.database_url
 # Fail fast (instead of asyncpg's 60s default) so health checks report an outage promptly.
 _connect_args: dict[str, Any] = {"timeout": 5} if _database_url.startswith("postgresql") else {}
 
-# A small pool: the Supabase pooler's connection limit is shared by every teammate's backend.
+# A small pool: the Supabase pooler's connection limit is shared by every backend on the database.
+# Requests beyond the pool wait for a free connection instead of failing at the pooler.
 engine: AsyncEngine = create_async_engine(
     _database_url,
-    pool_size=5,
-    max_overflow=5,
+    pool_size=_settings.db_pool_size,
+    max_overflow=_settings.db_max_overflow,
     pool_pre_ping=True,
     connect_args=_connect_args,
 )

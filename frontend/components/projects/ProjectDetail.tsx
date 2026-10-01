@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { CicdTable } from "@/components/cicd/CicdTable";
+import { CicdTable, DeployFailedBadge, latestDeployments } from "@/components/cicd/CicdTable";
 import { codeRisk, FindingList, ReviewTable } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
 import {
@@ -106,6 +106,7 @@ export function ProjectDetail({ service }: { service: string }) {
   const version = data.deployments.find((d) => d.status === "SUCCEEDED")?.version;
   const repo = data.project?.repository ?? null;
   const risk = codeRisk(reviewed);
+  const lastDeploy = latestDeployments(data.cicd)[data.service.name];
   const healthTone: Tone = latest ? (STATUS_TONE[latest.status] ?? "neutral") : "neutral";
   // A serious code issue outranks a passing health check: the page can load (HTTP 200) and still crash.
   const tone: Tone = risk && healthTone === "ok" ? "critical" : healthTone;
@@ -170,11 +171,17 @@ export function ProjectDetail({ service }: { service: string }) {
             {openIncidents.length > 0 && ` · ${openIncidents.length} open incident${openIncidents.length === 1 ? "" : "s"}`}
           </p>
           {latest && <p className="text-sm text-muted">last check {dateTime(latest.timestamp)}</p>}
+          <p className="text-sm">
+            <DeployFailedBadge event={lastDeploy} />
+          </p>
           {risk && (
             <p className="w-full text-sm text-red-800">
               {risk.severity === "critical" ? "Critical" : "High-risk"} code issue in the latest push (
-              {reviewed?.commit_sha.slice(0, 7)}). The server still responds, so health checks pass, but the page may
-              fail in the browser. See Code issues below.
+              {reviewed?.commit_sha.slice(0, 7)}).{" "}
+              {lastDeploy && (lastDeploy.conclusion === "FAILURE" || lastDeploy.conclusion === "TIMED_OUT")
+                ? "Its deploy failed, so the live site still runs the previous version. Fix it before the next deploy."
+                : "The server still responds, so health checks pass, but the page may fail in the browser."}{" "}
+              See Code issues below.
             </p>
           )}
         </div>

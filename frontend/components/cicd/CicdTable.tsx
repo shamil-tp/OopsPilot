@@ -21,6 +21,32 @@ export function cicdOutcome(event: CicdEvent): { text: string; tone: Tone } {
   }
 }
 
+/** Newest finished deployment per service (events arrive newest first). */
+export function latestDeployments(events: CicdEvent[]): Record<string, CicdEvent> {
+  const latest: Record<string, CicdEvent> = {};
+  for (const event of events) {
+    if (event.category !== "DEPLOYMENT" || !event.service_name || event.conclusion === null) continue;
+    latest[event.service_name] ??= event;
+  }
+  return latest;
+}
+
+/**
+ * "Last deploy failed": the host kept serving the previous build, so the site can be healthy while
+ * the newest commits are not live. Nothing when the latest deployment succeeded.
+ */
+export function DeployFailedBadge({ event }: { event: CicdEvent | undefined }) {
+  if (!event || (event.conclusion !== "FAILURE" && event.conclusion !== "TIMED_OUT")) return null;
+  const text = <Indicator tone="warn">Last deploy failed · older version live</Indicator>;
+  return event.html_url ? (
+    <a href={event.html_url} target="_blank" rel="noreferrer" className="hover:underline" title={`Commit ${event.commit_sha?.slice(0, 7) ?? "unknown"}`}>
+      {text}
+    </a>
+  ) : (
+    text
+  );
+}
+
 /** One-line title of an event, e.g. "deploy-production #57" or "push to main". */
 export function cicdTitle(event: CicdEvent): string {
   if (event.event_type === "push") {

@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # Supabase PostgreSQL (session pooler or direct connection). Required: there is deliberately
     # no default, so a missing value fails at startup instead of silently using another database.
     database_url: str
+    # Connections per backend process. Supabase's session pooler caps the whole project (about 15
+    # on the free plan), and every backend sharing the database (server + local) counts toward it.
+    db_pool_size: int = Field(default=3, ge=1, le=20)
+    db_max_overflow: int = Field(default=4, ge=0, le=20)
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
 
     # Gemini is the only provider for now. All agents share these keys through one key pool.

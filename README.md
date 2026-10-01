@@ -319,6 +319,7 @@ All configuration comes from environment variables; see [`.env.example`](.env.ex
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | **Required.** Supabase session-pooler connection string |
+| `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | Database connections per backend (3 + 4). Supabase's session pooler allows about 15 for the whole project, shared by every backend on the database; too many cause *Database unavailable* (503) |
 | `TEST_DATABASE_URL` | Separate database for the test suite (defaults to local SQLite) |
 | `GEMINI_API_KEY_1` … `GEMINI_API_KEY_4` | Gemini keys shared by all agents through a key pool (never logged) |
 | `GEMINI_MODEL` | Gemini model used by the agents |

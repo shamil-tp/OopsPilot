@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { CicdTable } from "@/components/cicd/CicdTable";
+import { CicdTable, DeployFailedBadge, latestDeployments } from "@/components/cicd/CicdTable";
 import { CodeRiskBadge, codeRisk, issueSummary } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
 import { AddProjectModal } from "@/components/projects/AddProjectModal";
@@ -65,6 +65,8 @@ interface Snapshot {
   webhook: WebhookStatus;
   /** Latest completed code review per service. */
   reviews: Record<string, CodeReview>;
+  /** Latest finished deployment event per service. */
+  lastDeploy: Record<string, CicdEvent>;
 }
 
 async function loadSnapshot(): Promise<Snapshot> {
@@ -72,12 +74,13 @@ async function loadSnapshot(): Promise<Snapshot> {
   const real = services.filter((s) => s.kind === "real");
   // Deployment history: every real project, or the demo's payment-api when there is none.
   const tracked = real.length > 0 ? real.map((s) => s.name) : services.slice(0, 1).map((s) => s.name);
-  const [healthList, deploymentLists, cicd, webhook, reviewList] = await Promise.all([
+  const [healthList, deploymentLists, cicd, webhook, reviewList, deployEvents] = await Promise.all([
     Promise.all(services.map((s) => getServiceHealth(s.name))),
     Promise.all(tracked.map((name) => listDeployments(name))),
     listCicdEvents({ limit: 8 }),
     getWebhookStatus(),
     real.length > 0 ? listCodeReviews({ limit: 30 }).catch(() => []) : Promise.resolve([]),
+    real.length > 0 ? listCicdEvents({ category: "DEPLOYMENT", limit: 50 }).catch(() => []) : Promise.resolve([]),
   ]);
   const reviews: Record<string, CodeReview> = {};
   for (const review of reviewList) {
@@ -92,6 +95,7 @@ async function loadSnapshot(): Promise<Snapshot> {
     cicd,
     webhook,
     reviews,
+    lastDeploy: latestDeployments(deployEvents),
   };
 }
 
@@ -231,6 +235,9 @@ function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
                     {h ? <ServiceStatusIndicator status={h.status} /> : <Indicator tone="neutral">Not checked yet</Indicator>}
                     <span className="text-xs">
                       <CodeRiskBadge review={snapshot.reviews[service.name]} />
+                    </span>
+                    <span className="text-xs">
+                      <DeployFailedBadge event={snapshot.lastDeploy[service.name]} />
                     </span>
                   </span>
                 </td>
