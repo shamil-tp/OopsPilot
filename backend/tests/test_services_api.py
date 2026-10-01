@@ -126,3 +126,38 @@ async def test_invalid_query_parameters_return_422(client: AsyncClient) -> None:
 
     assert bad_limit.status_code == 422
     assert bad_level.status_code == 422
+
+
+async def test_create_and_delete_monitored_project(client: AsyncClient) -> None:
+    payload = {
+        "name": "Acme Storefront",
+        "service": "acme-store",
+        "url": "https://store.acme.com/health",
+        "repository": "acme-corp/storefront",
+        "environment": "production",
+    }
+    created = await client.post("/api/services/projects", json=payload)
+    assert created.status_code == 201
+    body = created.json()
+    assert body["project"]["name"] == "Acme Storefront"
+    assert body["project"]["service"] == "acme-store"
+    assert body["project"]["repository"] == "acme-corp/storefront"
+    assert body["webhook"]["github_setup_url"] == "https://github.com/acme-corp/storefront/settings/hooks/new"
+    assert "/api/webhooks/github" in body["webhook"]["payload_url"]
+
+    # Verify project shows up in list
+    projects = (await client.get("/api/services/projects")).json()
+    assert any(p["service"] == "acme-store" for p in projects["projects"])
+
+    # Duplicate creation returns 409
+    dup = await client.post("/api/services/projects", json=payload)
+    assert dup.status_code == 409
+
+    # Delete project
+    deleted = await client.delete("/api/services/projects/acme-store")
+    assert deleted.status_code == 204
+
+    # Verify no longer in list
+    projects_after = (await client.get("/api/services/projects")).json()
+    assert not any(p["service"] == "acme-store" for p in projects_after["projects"])
+

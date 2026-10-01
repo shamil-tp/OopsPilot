@@ -13,6 +13,7 @@ const NAV = [
   { href: "/", label: "Overview", active: (path: string) => path === "/" },
   { href: "/incidents", label: "Incidents", active: (path: string) => path.startsWith("/incidents") },
   { href: "/code-reviews", label: "Code reviews", short: "Reviews", active: (path: string) => path.startsWith("/code-reviews") },
+  { href: "/cicd", label: "CI/CD", short: "CI/CD", active: (path: string) => path.startsWith("/cicd") },
 ];
 
 function NavLinks({ layout }: { layout: "sidebar" | "bar" }) {

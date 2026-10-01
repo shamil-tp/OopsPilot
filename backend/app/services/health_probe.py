@@ -109,19 +109,16 @@ async def check(
 
 async def run_forever(session_factory: async_sessionmaker[AsyncSession] = SessionLocal) -> None:
     """Check every monitored service with a URL until cancelled (started by the app lifespan)."""
-    targets = [service for service in real_services() if service.url]
-    if not targets:
-        return
     settings = get_settings()
     logger.info(
         "health_checks_started",
         extra={
-            "services": [s.name for s in targets],
             "interval_s": settings.monitored_health_interval_seconds,
         },
     )
     async with new_client() as client:
         while True:
+            targets = [service for service in real_services() if service.url]
             for service in targets:  # one failing project never blocks the others
                 try:
                     async with session_factory() as db:

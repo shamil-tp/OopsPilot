@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Empty, Indicator, table, type Tone } from "@/components/ui";
+import { Empty, Indicator, RiskLabel, table, type Tone } from "@/components/ui";
 import { label, shortDateTime } from "@/lib/format";
 import type { CodeReview, CodeReviewStatus, FindingSeverity, ReviewFinding } from "@/types/api";
 
@@ -26,7 +26,7 @@ export function ReviewStatus({ review }: { review: CodeReview }) {
 /** "2 issues · high" or "No issues". */
 export function issueSummary(review: CodeReview): { text: string; tone: Tone } {
   if (review.status !== "COMPLETED") return { text: label(review.status), tone: STATUS_TONE[review.status] };
-  if (review.findings.length === 0) return { text: "No issues", tone: "ok" };
+  if (review.findings.length === 0) return { text: "No issues · Clean", tone: "ok" };
   const worst = review.findings[0].severity;
   return {
     text: `${review.findings.length} issue${review.findings.length === 1 ? "" : "s"} · ${worst}`,
@@ -98,12 +98,19 @@ export function ReviewTable({ reviews, showService = true }: { reviews: CodeRevi
             return (
               <tr key={review.id} className="hover:bg-hover">
                 <td className={table.td}>
-                  <Link
-                    href={`/code-reviews/${review.id}`}
-                    className="font-mono text-[13px] font-medium text-ink underline-offset-2 hover:underline"
-                  >
-                    {review.commit_sha.slice(0, 7)}
-                  </Link>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Link
+                      href={`/code-reviews/${review.id}`}
+                      className="font-mono text-[13px] font-medium text-ink underline-offset-2 hover:underline"
+                    >
+                      {review.commit_sha.slice(0, 7)}
+                    </Link>
+                    {showService && (
+                      <span className="font-mono text-[11px] text-muted md:hidden">
+                        · {review.service_name}
+                      </span>
+                    )}
+                  </div>
                   <span className="block max-w-xs text-xs break-words text-muted sm:truncate">
                     {review.commit_message ?? review.branch}
                   </span>
@@ -112,9 +119,22 @@ export function ReviewTable({ reviews, showService = true }: { reviews: CodeRevi
                   <td className={`${table.td} ${table.mono} hidden md:table-cell`}>{review.service_name}</td>
                 )}
                 <td className={table.td}>
-                  <Indicator tone={issues.tone}>{issues.text}</Indicator>
+                  <div className="flex flex-col">
+                    <Indicator tone={issues.tone}>{issues.text}</Indicator>
+                    {review.findings.length > 0 ? (
+                      <span className="mt-0.5 block max-w-xs text-xs text-muted truncate sm:max-w-sm" title={review.findings[0].title}>
+                        {review.findings[0].title}
+                      </span>
+                    ) : review.status === "COMPLETED" ? (
+                      <span className="mt-0.5 block max-w-xs text-xs text-muted truncate sm:max-w-sm">
+                        All clear · Clean change
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
-                <td className={`${table.td} hidden sm:table-cell`}>{review.risk ? label(review.risk) : "—"}</td>
+                <td className={`${table.td} hidden sm:table-cell`}>
+                  {review.risk ? <RiskLabel risk={review.risk} /> : <span className="text-muted">—</span>}
+                </td>
                 <td className={`${table.td} text-right whitespace-nowrap text-muted`}>
                   {shortDateTime(review.created_at)}
                 </td>

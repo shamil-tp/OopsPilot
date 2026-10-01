@@ -7,6 +7,7 @@ import { CicdTable } from "@/components/cicd/CicdTable";
 import { FindingList, ReviewTable } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
 import {
+  Button,
   Dot,
   Empty,
   ErrorNote,
@@ -19,6 +20,7 @@ import {
   table,
   type Tone,
 } from "@/components/ui";
+import { WebhookModal } from "@/components/projects/WebhookModal";
 import {
   ApiError,
   getHealthHistory,
@@ -72,6 +74,7 @@ const STATUS_TONE: Record<string, Tone> = { HEALTHY: "ok", DEGRADED: "warn", DOW
 export function ProjectDetail({ service }: { service: string }) {
   const [data, setData] = useState<ProjectData | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [showWebhook, setShowWebhook] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,7 +145,16 @@ export function ProjectDetail({ service }: { service: string }) {
               )}
             </>
           }
-          actions={<PrintButton label="Download PDF" />}
+          actions={
+            <div className="flex items-center gap-2">
+              {repo && (
+                <Button variant="secondary" onClick={() => setShowWebhook(true)}>
+                  Webhook setup
+                </Button>
+              )}
+              <PrintButton label="Download PDF" />
+            </div>
+          }
         />
         {error && <ErrorNote>{error}</ErrorNote>}
       </div>
@@ -265,9 +277,23 @@ export function ProjectDetail({ service }: { service: string }) {
         </Section>
       </div>
 
-      <Section title="GitHub activity">
+      <Section
+        title="GitHub activity"
+        aside={
+          <Link href={`/cicd?service=${service}`} className="text-xs font-medium text-ink hover:underline">
+            View in CI/CD console →
+          </Link>
+        }
+      >
         {data.cicd.length === 0 ? <Empty>No GitHub events for this project yet.</Empty> : <CicdTable events={data.cicd} />}
       </Section>
+
+      <WebhookModal
+        isOpen={showWebhook}
+        onClose={() => setShowWebhook(false)}
+        repository={repo}
+        serviceName={data.service.display_name}
+      />
     </div>
   );
 }

@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -50,11 +53,26 @@ DEMO_SERVICES: tuple[MonitoredService, ...] = (
 
 DEMO_SERVICE_NAMES: frozenset[str] = frozenset(service.name for service in DEMO_SERVICES)
 
+_db_services: dict[str, MonitoredService] = {}
+
+
+def set_db_services(services_list: list[MonitoredService]) -> None:
+    global _db_services
+    _db_services = {s.name: s for s in services_list}
+
+
+def add_db_service(service: MonitoredService) -> None:
+    _db_services[service.name] = service
+
+
+def remove_db_service(name: str) -> None:
+    _db_services.pop(name, None)
+
 
 def real_services() -> tuple[MonitoredService, ...]:
-    """Every configured real application (MONITORED_PROJECTS and/or MONITORED_SERVICE)."""
-    return tuple(
-        MonitoredService(
+    """Every configured real application (MONITORED_PROJECTS in .env plus DB-registered projects)."""
+    env_projects = {
+        project.service: MonitoredService(
             name=project.service,
             display_name=project.name,
             description=f"{project.name} ({project.environment})",
@@ -65,7 +83,9 @@ def real_services() -> tuple[MonitoredService, ...]:
         )
         for project in get_settings().projects
         if project.service not in DEMO_SERVICE_NAMES
-    )
+    }
+    combined = {**env_projects, **_db_services}
+    return tuple(combined.values())
 
 
 def services() -> tuple[MonitoredService, ...]:
@@ -84,3 +104,31 @@ def get_service(name: str) -> MonitoredService | None:
 
 def is_demo_service(name: str) -> bool:
     return name in DEMO_SERVICE_NAMES
+
+
+async def sync_from_db(session_factory=None) -> None:
+    """Populate the in-memory service catalog with projects from the database."""
+    from sqlalchemy import select
+    from app.db.session import SessionLocal
+    from app.models.monitored_project import MonitoredProject
+
+    factory = session_factory or SessionLocal
+    try:
+        async with factory() as db:
+            rows = await db.scalars(select(MonitoredProject).order_by(MonitoredProject.id.asc()))
+            set_db_services([
+                MonitoredService(
+                    name=p.service,
+                    display_name=p.name,
+                    description=f"{p.name} ({p.environment})",
+                    kind="real",
+                    url=p.url,
+                    repository=p.repository,
+                    environment=p.environment,
+                )
+                for p in rows
+                if p.service not in DEMO_SERVICE_NAMES
+            ])
+    except Exception as exc:
+        logger.warning("sync_projects_failed", extra={"error": type(exc).__name__})
+

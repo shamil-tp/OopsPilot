@@ -50,6 +50,7 @@ TABLES = (
     "incident_reports",
     "cicd_events",
     "code_reviews",
+    "monitored_projects",
 )
 # Marks the throwaway rows; they are rolled back regardless.
 PROBE = "opspilot-db-check"

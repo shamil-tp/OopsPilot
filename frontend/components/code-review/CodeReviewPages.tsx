@@ -14,10 +14,24 @@ const REFRESH_MS = 10_000;
 export function CodeReviewList() {
   const [reviews, setReviews] = useState<CodeReview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
+    try {
+      const rows = await listCodeReviews({ limit: 50 });
+      setReviews(rows);
+      setError(null);
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : "Could not load code reviews");
+    } finally {
+      if (manual) setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const load = () =>
+    const tick = () => {
       listCodeReviews({ limit: 50 })
         .then((rows) => {
           if (!cancelled) {
@@ -28,8 +42,9 @@ export function CodeReviewList() {
         .catch((err: unknown) => {
           if (!cancelled) setError(err instanceof ApiError ? err.message : "Could not load code reviews");
         });
-    void load();
-    const timer = setInterval(() => void load(), REFRESH_MS);
+    };
+    void tick();
+    const timer = setInterval(() => void tick(), REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -41,6 +56,15 @@ export function CodeReviewList() {
       <PageHeader
         title="Code reviews"
         description="Every push to a monitored project's main branch is reviewed automatically: what could break, and how to fix it."
+        actions={
+          <Button
+            className="print:hidden"
+            disabled={refreshing}
+            onClick={() => void load(true)}
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+        }
       />
       {error && <ErrorNote>{error}</ErrorNote>}
       {reviews === null ? (

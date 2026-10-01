@@ -9,6 +9,8 @@ import type {
   Deployment,
   ExecutionRun,
   Incident,
+  ProjectCreateInput,
+  ProjectCreateResponse,
   Projects,
   IncidentReport,
   InvestigationRun,
@@ -78,6 +80,21 @@ async function post<T>(path: string): Promise<T> {
   throw new ApiError(detailOf(data, status), status, data);
 }
 
+async function postJson<T, B = unknown>(path: string, body: B): Promise<T> {
+  const { status, data } = await request<T>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (status >= 200 && status < 300 && data !== null) return data;
+  throw new ApiError(detailOf(data, status), status, data);
+}
+
+async function del(path: string): Promise<void> {
+  const { status, data } = await request<unknown>(path, { method: "DELETE" });
+  if (status >= 200 && status < 300) return;
+  throw new ApiError(detailOf(data, status), status, data);
+}
+
 export async function getSystemHealth(): Promise<SystemHealth> {
   const { status, data } = await request<SystemHealth>("/api/system/health");
   // 503 still carries a SystemHealth body describing which dependency is down.
@@ -92,6 +109,10 @@ export async function getSystemHealth(): Promise<SystemHealth> {
 export const listServices = () => getJson<ServiceSummary[]>("/api/services");
 // Optional so a backend without project support (older deployment) still shows the demo.
 export const getProjects = () => getOptional<Projects>("/api/services/projects");
+export const createProject = (input: ProjectCreateInput) =>
+  postJson<ProjectCreateResponse, ProjectCreateInput>("/api/services/projects", input);
+export const deleteProject = (service: string) =>
+  del(`/api/services/projects/${encodeURIComponent(service)}`);
 export const getServiceHealth = (name: string) =>
   getOptional<ServiceHealth>(`/api/services/${encodeURIComponent(name)}/health`);
 export const listDeployments = (name: string) =>
@@ -136,6 +157,7 @@ export function listCicdEvents(query: CicdEventQuery = {}): Promise<CicdEvent[]>
   const qs = params.toString();
   return getJson<CicdEvent[]>(`/api/cicd/events${qs ? `?${qs}` : ""}`);
 }
+export const getCicdEvent = (id: number) => getJson<CicdEvent>(`/api/cicd/events/${id}`);
 export const getWebhookStatus = () => getJson<WebhookStatus>("/api/webhooks/github/status");
 
 // --- AI code reviews of pushes ------------------------------------------------------------------

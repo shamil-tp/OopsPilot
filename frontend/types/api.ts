@@ -84,6 +84,27 @@ export interface Projects {
   health_check_interval_seconds: number;
 }
 
+export interface WebhookInstructions {
+  payload_url: string;
+  content_type: string;
+  secret_configured: boolean;
+  events: string[];
+  github_setup_url: string | null;
+}
+
+export interface ProjectCreateInput {
+  name: string;
+  service?: string;
+  url?: string;
+  repository: string;
+  environment?: string;
+}
+
+export interface ProjectCreateResponse {
+  project: Project;
+  webhook: WebhookInstructions;
+}
+
 export interface ServiceHealth {
   service_name: string;
   timestamp: string;
@@ -474,7 +495,12 @@ export interface CicdEvent {
 export interface CicdEventQuery {
   service?: string;
   repository?: string;
+  branch?: string;
+  commit_sha?: string;
+  workflow?: string;
   category?: CicdCategory;
+  status?: CicdStatus;
+  conclusion?: CicdConclusion;
   since?: string;
   until?: string;
   limit?: number;

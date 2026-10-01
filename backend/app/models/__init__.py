@@ -5,6 +5,7 @@ from app.models.approval import Approval
 from app.models.cicd import CicdEvent
 from app.models.code_review import CodeReview
 from app.models.incident import Incident
+from app.models.monitored_project import MonitoredProject
 from app.models.report import IncidentReport
 from app.models.telemetry import Deployment, LogEntry, ServiceHealth
 
@@ -18,5 +19,6 @@ __all__ = [
     "Incident",
     "IncidentReport",
     "LogEntry",
+    "MonitoredProject",
     "ServiceHealth",
 ]

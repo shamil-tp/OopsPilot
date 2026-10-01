@@ -1,25 +1,38 @@
+import re
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models import ServiceHealth
+from app.models import MonitoredProject, ServiceHealth
 from app.models.enums import LogLevel
 from app.schemas.common import ErrorResponse
 from app.schemas.services import (
     DeploymentRead,
     LogEntryRead,
+    ProjectCreate,
+    ProjectCreateResponse,
     ProjectRead,
     ProjectsRead,
     ServiceHealthRead,
     ServiceSummary,
+    WebhookInstructions,
 )
 from app.services import telemetry
-from app.services.service_catalog import MonitoredService, get_service, real_services, services
+from app.services.service_catalog import (
+    DEMO_SERVICE_NAMES,
+    MonitoredService,
+    add_db_service,
+    get_service,
+    real_services,
+    remove_db_service,
+    service_names,
+    services,
+)
 
 router = APIRouter(prefix="/services", tags=["services"])
 
@@ -156,3 +169,124 @@ async def list_projects() -> ProjectsRead:
         demo_mode=settings.demo_mode,
         health_check_interval_seconds=settings.monitored_health_interval_seconds,
     )
+
+
+def _clean_repository(repo: str) -> str:
+    cleaned = repo.strip().rstrip("/")
+    if "github.com/" in cleaned:
+        cleaned = cleaned.split("github.com/", 1)[1]
+    elif "github.com:" in cleaned:
+        cleaned = cleaned.split("github.com:", 1)[1]
+    if cleaned.endswith(".git"):
+        cleaned = cleaned[:-4]
+    return cleaned
+
+
+@router.post(
+    "/projects",
+    response_model=ProjectCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a new monitored project",
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid project configuration"},
+        409: {"model": ErrorResponse, "description": "Project or service identifier already exists"},
+    },
+)
+async def create_project(
+    data: ProjectCreate, db: DbSession, request: Request
+) -> ProjectCreateResponse:
+    repo = _clean_repository(data.repository)
+    if "/" not in repo or len(repo.split("/")) != 2:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Repository must be in the format 'owner/repo' (e.g. 'MrNihalT/mallutyping')",
+        )
+
+    raw_service = data.service or data.name
+    service_slug = re.sub(r"[^a-z0-9\-]+", "-", raw_service.lower()).strip("-")
+    if not service_slug:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid service slug")
+
+    if service_slug in DEMO_SERVICE_NAMES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Service identifier '{service_slug}' is reserved for the demo simulation",
+        )
+
+    existing = await db.scalar(
+        select(MonitoredProject).where(MonitoredProject.service == service_slug)
+    )
+    if existing or service_slug in service_names():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"A project with service identifier '{service_slug}' already exists",
+        )
+
+    clean_url = data.url.strip() if data.url and data.url.strip() else None
+
+    project = MonitoredProject(
+        name=data.name.strip(),
+        service=service_slug,
+        url=clean_url,
+        repository=repo,
+        environment=data.environment.strip() or "production",
+    )
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+
+    add_db_service(
+        MonitoredService(
+            name=project.service,
+            display_name=project.name,
+            description=f"{project.name} ({project.environment})",
+            kind="real",
+            url=project.url,
+            repository=project.repository,
+            environment=project.environment,
+        )
+    )
+
+    settings = get_settings()
+    base = str(request.base_url).rstrip("/")
+    payload_url = f"{base}/api/webhooks/github"
+
+    webhook = WebhookInstructions(
+        payload_url=payload_url,
+        content_type="application/json",
+        secret_configured=bool(settings.github_webhook_secret and settings.github_webhook_secret.get_secret_value()),
+        events=["push", "deployment_status"],
+        github_setup_url=f"https://github.com/{repo}/settings/hooks/new",
+    )
+
+    return ProjectCreateResponse(
+        project=ProjectRead(
+            name=project.name,
+            environment=project.environment,
+            service=project.service,
+            url=project.url,
+            repository=project.repository,
+        ),
+        webhook=webhook,
+    )
+
+
+@router.delete(
+    "/projects/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a dynamically registered project",
+    responses={
+        404: {"model": ErrorResponse, "description": "Project not found or configured in .env"},
+    },
+)
+async def delete_project(name: str, db: DbSession) -> None:
+    project = await db.scalar(select(MonitoredProject).where(MonitoredProject.service == name))
+    if project is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Project '{name}' was not found in registered projects (built-in or .env projects cannot be deleted via API)",
+        )
+    await db.delete(project)
+    await db.commit()
+    remove_db_service(name)
+

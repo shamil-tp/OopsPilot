@@ -33,7 +33,7 @@ from app.models.enums import (
     IncidentStatus,
 )
 from app.services.agent_events import EventRecorder
-from app.services.service_catalog import service_names
+from app.services.service_catalog import real_services, service_names
 
 logger = get_logger(__name__)
 
@@ -57,12 +57,12 @@ class IngestResult:
 
 
 def repository_service(repository: str) -> str | None:
-    """The service a repository deploys: the project in MONITORED_PROJECTS with that repository,
+    """The service a repository deploys: the project in real_services() with that repository,
     the built-in demo repository, or GITHUB_REPOSITORY (-> GITHUB_SERVICE / MONITORED_SERVICE)."""
     settings = get_settings()
-    for project in settings.projects:
-        if project.repository and project.repository.lower() == repository.lower():
-            return project.service if project.service in service_names() else None
+    for service in real_services():
+        if service.repository and service.repository.lower() == repository.lower():
+            return service.name if service.name in service_names() else None
     if repository.lower() == DEMO_REPOSITORY:
         return DEMO_SERVICE
     configured = settings.github_repository
@@ -73,8 +73,15 @@ def repository_service(repository: str) -> str | None:
 
 
 def repository_allowed(repository: str) -> bool:
-    configured = get_settings().github_repository
-    return configured is None or repository.lower() in {configured.lower(), DEMO_REPOSITORY}
+    settings = get_settings()
+    configured = settings.github_repository
+    if configured and repository.lower() == configured.lower():
+        return True
+    if repository.lower() == DEMO_REPOSITORY:
+        return True
+    if any(s.repository and s.repository.lower() == repository.lower() for s in real_services()):
+        return True
+    return configured is None
 
 
 def short_sha(sha: str | None) -> str:

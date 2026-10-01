@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CicdTable } from "@/components/cicd/CicdTable";
 import { issueSummary } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
+import { AddProjectModal } from "@/components/projects/AddProjectModal";
 import {
   Button,
   Dot,
@@ -248,6 +249,7 @@ export function Overview() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"simulate" | "reset" | null>(null);
+  const [showAddProject, setShowAddProject] = useState(false);
 
   const apply = useCallback((result: Snapshot | Error) => {
     if (result instanceof Error) setError(result instanceof ApiError ? result.message : "Unexpected error");
@@ -256,6 +258,12 @@ export function Overview() {
       setError(null);
     }
   }, []);
+
+  const reload = useCallback(() => {
+    return loadSnapshot()
+      .catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))))
+      .then(apply);
+  }, [apply]);
 
   useEffect(() => {
     let cancelled = false;
@@ -351,16 +359,21 @@ export function Overview() {
             )
           }
           actions={
-            demoMode && (
-              <>
-                <Button variant="quiet" disabled={busy !== null} onClick={() => void reset()}>
-                  {busy === "reset" ? "Resetting…" : "Reset demo"}
-                </Button>
-                <Button variant="primary" disabled={busy !== null} onClick={() => void simulate()}>
-                  {busy === "simulate" ? "Simulating…" : "Simulate incident"}
-                </Button>
-              </>
-            )
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setShowAddProject(true)}>
+                + Add project
+              </Button>
+              {demoMode && (
+                <>
+                  <Button variant="quiet" disabled={busy !== null} onClick={() => void reset()}>
+                    {busy === "reset" ? "Resetting…" : "Reset demo"}
+                  </Button>
+                  <Button variant="primary" disabled={busy !== null} onClick={() => void simulate()}>
+                    {busy === "simulate" ? "Simulating…" : "Simulate incident"}
+                  </Button>
+                </>
+              )}
+            </div>
           }
         />
         {demoMode && (
@@ -379,15 +392,33 @@ export function Overview() {
         <>
           <ProductionStatus snapshot={snapshot} />
 
-          {projects.length > 0 && (
-            <Section title="Projects" aside={`Health checked every ${snapshot.projects?.health_check_interval_seconds ?? 60} s`}>
-              <ProjectsTable snapshot={snapshot} />
-              <p className="mt-2 text-xs text-muted">
-                Each project&apos;s URL is checked over HTTP. Latency is the check&apos;s response time; failed checks
-                is the share of the last 10 checks that did not succeed.
-              </p>
-            </Section>
-          )}
+          <Section
+            title="Projects"
+            aside={
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted">
+                  Health checked every {snapshot.projects?.health_check_interval_seconds ?? 60} s
+                </span>
+                <Button className="text-xs py-1 px-2.5" onClick={() => setShowAddProject(true)}>
+                  + Add project
+                </Button>
+              </div>
+            }
+          >
+            {projects.length > 0 ? (
+              <>
+                <ProjectsTable snapshot={snapshot} />
+                <p className="mt-2 text-xs text-muted">
+                  Each project&apos;s URL is checked over HTTP. Latency is the check&apos;s response time; failed checks
+                  is the share of the last 10 checks that did not succeed.
+                </p>
+              </>
+            ) : (
+              <Empty>
+                No external projects registered yet. Click &quot;+ Add project&quot; to connect a GitHub repository.
+              </Empty>
+            )}
+          </Section>
 
           <Section
             title="Incidents"
@@ -510,9 +541,14 @@ export function Overview() {
           <Section
             title="GitHub activity"
             aside={
-              <Indicator tone={snapshot.webhook.configured ? "ok" : "neutral"}>
-                {snapshot.webhook.configured ? "Webhook configured" : "Webhook not configured"}
-              </Indicator>
+              <div className="flex items-center gap-3">
+                <Indicator tone={snapshot.webhook.configured ? "ok" : "neutral"}>
+                  {snapshot.webhook.configured ? "Webhook configured" : "Webhook not configured"}
+                </Indicator>
+                <Link href="/cicd" className="text-xs font-medium text-ink hover:underline">
+                  View all CI/CD →
+                </Link>
+              </div>
             }
           >
             {snapshot.cicd.length === 0 ? (
@@ -523,6 +559,12 @@ export function Overview() {
           </Section>
         </>
       )}
+
+      <AddProjectModal
+        isOpen={showAddProject}
+        onClose={() => setShowAddProject(false)}
+        onProjectAdded={() => void reload()}
+      />
     </div>
   );
 }
