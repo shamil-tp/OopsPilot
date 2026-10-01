@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Dot, type Tone } from "@/components/ui";
+import { OpsPilotLogo } from "@/components/shell/Logo";
 import { useSystemHealth } from "@/hooks/useSystemHealth";
 import { API_URL } from "@/lib/config";
 
@@ -92,8 +93,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
       <header className="sticky top-0 z-10 border-b border-line bg-panel print:hidden">
         <div className="flex h-12 items-center gap-3 px-4 sm:gap-4 sm:px-6">
-          <Link href="/" className="text-[15px] font-semibold tracking-tight text-ink">
-            OpsPilot
+          <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-ink">
+            <OpsPilotLogo className="h-5 w-5 shrink-0" />
+            <span>OpsPilot</span>
           </Link>
           <nav aria-label="Primary" className="flex min-w-0 items-center gap-0.5 sm:gap-1 lg:hidden">
             <NavLinks layout="bar" />
@@ -110,6 +112,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavLinks layout="sidebar" />
           </nav>
           <div className="mt-auto space-y-2 border-t border-line p-4 text-xs text-muted">
+            <div className="flex items-center gap-1.5 font-medium text-ink">
+              <OpsPilotLogo className="h-4 w-4 shrink-0" />
+              <span>OpsPilot</span>
+            </div>
             <p>AI-Powered Autonomous Incident Response &amp; DevOps Copilot</p>
             <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="inline-block hover:text-ink">
               API reference ↗

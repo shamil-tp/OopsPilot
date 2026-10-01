@@ -51,7 +51,7 @@ async function loadProject(name: string): Promise<ProjectData | null> {
   const [projects, checks, reviews, incidents, deployments, cicd] = await Promise.all([
     getProjects(),
     getHealthHistory(name, 20),
-    listCodeReviews({ service: name, limit: 10 }),
+    listCodeReviews({ service: name, limit: 10 }).catch(() => []),
     listIncidents(),
     listDeployments(name),
     listCicdEvents({ service: name, limit: 10 }),

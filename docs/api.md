@@ -211,7 +211,7 @@ Event types so far: `incident_created`, `agent_started`, `tool_started`, `tool_c
 
 Both take **no request body**: they decide on the incident's stored `PENDING` approval, so the
 client can never choose the action, target, version or parameters. Approve executes the stored,
-re-validated parameters immediately (CLAUDE.md §18); no AI is called.
+re-validated parameters immediately (project spec §18); no AI is called.
 
 | Status | Approve | Reject |
 | --- | --- | --- |

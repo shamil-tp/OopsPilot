@@ -43,7 +43,11 @@ export function CodeReviewList() {
         description="Every push to a monitored project's main branch is reviewed automatically: what could break, and how to fix it."
       />
       {error && <ErrorNote>{error}</ErrorNote>}
-      {!reviews ? <Empty>Loading code reviews…</Empty> : <ReviewTable reviews={reviews} />}
+      {reviews === null ? (
+        !error && <Empty>Loading code reviews…</Empty>
+      ) : (
+        <ReviewTable reviews={reviews} />
+      )}
     </div>
   );
 }

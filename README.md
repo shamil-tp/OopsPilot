@@ -5,9 +5,16 @@
 OpsPilot is an **AI-assisted incident response and DevOps copilot with deterministic backend
 controls and human approval for risky remediation**. It investigates a production incident from
 structured operational evidence (logs, health, deployments, previous incidents, GitHub CI/CD
-events), identifies the most likely root cause with citations, proposes a safe remediation,
-waits for a human to approve it, executes the approved action in a simulated environment,
-verifies recovery with objective checks, and writes the incident report.
+events, AI code reviews), identifies the most likely root cause with citations, proposes a safe
+remediation, waits for a human to approve it, has the approved action carried out (by the backend in
+the demo, by an operator for real projects), verifies recovery with objective checks, and writes
+the incident report.
+
+It works in two modes:
+
+- **Demo mode**: a deterministic, repeatable payment-api scenario (one-click *Simulate incident*).
+- **Real projects**: your live apps (e.g. Mallu Typing, EdTech) are health-checked continuously,
+  incidents open automatically, and every push to `main` gets an AI code review.
 
 > The AI proposes. The backend validates. A human approves risky actions. The backend executes
 > only allowlisted actions. Verification decides — not the model.
@@ -104,6 +111,31 @@ Report ◀─ Verification (6 backend checks decide) ◀─ Execution (backend, 
 | AI | Google Gemini (`gemini-3.1-flash-lite`) behind an `AIProvider` interface (Ollama/Qwen planned) |
 | DevOps | Docker, Docker Compose, GitHub Actions, GitHub Webhooks |
 
+## 🌐 Monitoring Your Own Projects
+
+No CI/CD pipeline is required. For each application:
+
+1. Add it to `MONITORED_PROJECTS` in the backend `.env`:
+   ```env
+   MONITORED_PROJECTS=[{"name":"Mallu Typing","service":"mallutyping-web","url":"https://mallutyping.nihalt.in","repository":"MrNihalT/mallutyping"}]
+   ```
+2. In the GitHub repository: **Settings → Webhooks → Add webhook**
+   - Payload URL: `https://<your-backend>/api/webhooks/github`
+   - Content type: `application/json`, Secret: the value of `GITHUB_WEBHOOK_SECRET`
+   - Events: **Pushes** and **Deployment statuses** (Workflow runs optional)
+3. Optional: set `GITHUB_TOKEN` (read-only) for private repositories.
+4. Restart the backend. The project appears on the Overview with its own page.
+
+What happens next:
+
+| Trigger | OpsPilot does |
+| --- | --- |
+| Every health check (60 s) | Records status and response time; 2 DOWN (or 3 failing) checks in a row open an incident |
+| New incident | Investigates, finds the likely root cause and proposes a fix automatically, then **waits for human approval** |
+| Approved action | An operator performs it and clicks *Mark as done*; OpsPilot verifies recovery from the next health checks |
+| Push to `main` | AI code review: each issue with severity, file:line, explanation and how to fix it |
+| Any page | *Download PDF* for incident reports, code reviews and project summaries |
+
 ## Demo Flow
 
 The full 5–7 minute script, with timings and emergency recovery, is in
@@ -134,8 +166,8 @@ Reset ─▶ GitHub push + deploy-production (v1.8.2) ─▶ Simulate Incident (
 │   │   ├── tools/           tool registry, permissions, read-only telemetry/CI-CD tools
 │   │   ├── websocket/       live incident event stream
 │   │   └── main.py
-│   ├── alembic/             database migrations (0001–0004)
-│   ├── scripts/             check_database.py, send_github_webhook.py
+│   ├── alembic/             database migrations (0001–0006)
+│   ├── scripts/             check_database.py, send_github_webhook.py, link_cicd_events.py
 │   └── tests/
 ├── frontend/                Next.js (App Router) + TypeScript + Tailwind + Framer Motion
 │   ├── app/  components/  hooks/  lib/  types/
@@ -175,10 +207,10 @@ python -m scripts.check_database
 ```
 
 Alternatively, paste [`docs/supabase-schema.sql`](docs/supabase-schema.sql) into the Supabase SQL
-Editor. It creates exactly the same schema and records revision `0005` for Alembic. Use one
+Editor. It creates exactly the same schema and records revision `0006` for Alembic. Use one
 method or the other, not both.
 
-`check_database` verifies the connection, the Alembic revision, that all 9 tables exist with RLS
+`check_database` verifies the connection, the Alembic revision, that all 10 tables exist with RLS
 enabled, and CRUD across every table. Its writes run in one transaction that is always rolled
 back, so it never changes data.
 
@@ -393,8 +425,8 @@ never appear in logs, API responses, WebSocket messages or the browser bundle (t
 
 ## ⚠️ Limitations
 
-- **Simulated environment.** Services, telemetry and the rollback are simulated in PostgreSQL; there
-  is no real infrastructure control, by design.
+- **No infrastructure control.** In demo mode services and the rollback are simulated; for real
+  projects OpsPilot only observes and recommends, and an operator performs the approved action.
 - **One scenario.** The demo tells one deterministic story (payment-api v1.8.2 regression). The
   agents are generic, but have only been exercised on this scenario.
 - **LLM wording varies.** Gemini's phrasing of findings and root cause differs between runs; the
@@ -411,7 +443,7 @@ never appear in logs, API responses, WebSocket messages or the browser bundle (t
 
 ## 👥 Team
 
-A 4-person student hackathon team. Roles as defined in [`CLAUDE.md`](CLAUDE.md) §50:
+A 4-person student hackathon team:
 
 | Role | Owns |
 | --- | --- |
@@ -422,6 +454,7 @@ A 4-person student hackathon team. Roles as defined in [`CLAUDE.md`](CLAUDE.md) 
 
 ## 📍 Status
 
-All 12 phases are implemented: simulated environment, AI provider and key pool, the four agents,
-human approval and execution, verification, report, real-time dashboard, GitHub webhook and CI/CD
-telemetry, and final QA ([`docs/final-qa.md`](docs/final-qa.md)).
+Implemented: simulated environment, AI provider and key pool, the four agents, human approval and
+execution, verification, report, real-time dashboard, GitHub webhook and CI/CD telemetry, real
+project monitoring with automatic incident response, AI code review on push, project pages and PDF
+reports. Final QA: [`docs/final-qa.md`](docs/final-qa.md).
