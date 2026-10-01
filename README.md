@@ -449,7 +449,7 @@ A 4-person student hackathon team:
 | --- | --- |
 | AI / Agents — EveryOne | `backend/app/agents/`, `backend/app/ai/`, `backend/app/prompts/` |
 | Backend / DevOps simulation — EveryOne | `backend/app/api/`, `tools/`, `services/`, `models/`, `db/` |
-| Frontend — Gifty & Ektha | `frontend/` |
+| Frontend — Gifty & Ektha & Shamil | `frontend/` |
 | Integration / CI-CD / QA — Nihal & Shamil | `.github/`, `docs/`, `docker-compose.yml`, tests |
 
 ## 📍 Status
