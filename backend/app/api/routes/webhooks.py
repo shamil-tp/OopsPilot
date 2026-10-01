@@ -5,7 +5,9 @@ Order of checks (nothing from the payload is trusted before the signature is ver
     -> event/delivery headers (400) -> JSON object (400) -> normalize + store (422 if malformed)
 
 Responses: 201 recorded, 200 duplicate delivery (idempotent) or ping, 202 ignored (unsupported
-event or repository). Processing is deterministic: no AI, no GitHub API, no commands.
+event or repository). Processing is deterministic: no AI, no GitHub API, no commands. A push
+to a monitored project's default branch schedules a background code review
+(app.agents.code_review) that runs after the response.
 """
 
 import json
@@ -15,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents import code_review
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import get_db
@@ -109,6 +112,14 @@ async def github_webhook(
     except PayloadError as exc:
         logger.warning("github_payload_invalid", extra={"delivery_id": delivery_id})
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+
+    if (
+        result.status == "recorded"
+        and result.event is not None
+        and code_review.eligible(result.event)
+    ):
+        # The AI review runs after this response: webhook processing itself stays deterministic.
+        code_review.schedule(result.event.id)
 
     response.status_code = {
         "recorded": status.HTTP_201_CREATED,

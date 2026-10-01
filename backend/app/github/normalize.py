@@ -234,6 +234,7 @@ def _push(
             "ref_type": "tag" if tag is not None else "branch" if branch is not None else "other",
             "tag": clip(tag, 100),
             "before_sha": commit_sha(p.before),
+            "default_branch": clip(p.repository.default_branch, 255),
             "deleted": p.deleted,
             "commit_count": len(p.commits),
             "changed_file_count": len(changed),

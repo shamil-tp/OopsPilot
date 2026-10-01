@@ -2,6 +2,7 @@ import { API_URL } from "@/lib/config";
 import type {
   AgentEvent,
   CicdEvent,
+  CodeReview,
   CicdEventQuery,
   DecisionResponse,
   DemoResetResponse,
@@ -136,3 +137,17 @@ export function listCicdEvents(query: CicdEventQuery = {}): Promise<CicdEvent[]>
   return getJson<CicdEvent[]>(`/api/cicd/events${qs ? `?${qs}` : ""}`);
 }
 export const getWebhookStatus = () => getJson<WebhookStatus>("/api/webhooks/github/status");
+
+// --- AI code reviews of pushes ------------------------------------------------------------------
+
+export function listCodeReviews(query: { service?: string; limit?: number } = {}): Promise<CodeReview[]> {
+  const params = new URLSearchParams();
+  if (query.service) params.set("service", query.service);
+  if (query.limit) params.set("limit", String(query.limit));
+  const qs = params.toString();
+  return getJson<CodeReview[]>(`/api/code-reviews${qs ? `?${qs}` : ""}`);
+}
+export const getCodeReview = (id: number) => getJson<CodeReview>(`/api/code-reviews/${id}`);
+export const retryCodeReview = (id: number) => post<CodeReview>(`/api/code-reviews/${id}/retry`);
+export const getHealthHistory = (name: string, limit = 20) =>
+  getJson<ServiceHealth[]>(`/api/services/${encodeURIComponent(name)}/health/history?limit=${limit}`);

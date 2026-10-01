@@ -209,3 +209,12 @@ export function evidenceIndex(...lists: EvidenceItem[][]): Map<string, EvidenceI
   for (const list of lists) for (const item of list) index.set(item.id, item);
   return index;
 }
+
+/** Opens the browser's print dialog; choose "Save as PDF". Hidden in the printed document. */
+export function PrintButton({ label = "Download PDF" }: { label?: string }) {
+  return (
+    <Button className="print:hidden" onClick={() => window.print()}>
+      {label}
+    </Button>
+  );
+}

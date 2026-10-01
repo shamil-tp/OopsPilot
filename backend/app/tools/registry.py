@@ -86,6 +86,7 @@ AGENT_TOOL_ALLOWLIST: dict[AgentName, frozenset[str]] = {
             "get_recent_deployments",
             "get_previous_incidents",
             "get_recent_cicd_events",
+            "get_recent_code_reviews",
         }
     ),
 }

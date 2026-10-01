@@ -2,10 +2,12 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import get_db
+from app.models import ServiceHealth
 from app.models.enums import LogLevel
 from app.schemas.common import ErrorResponse
 from app.schemas.services import (
@@ -57,6 +59,24 @@ async def list_services(db: DbSession) -> list[ServiceSummary]:
             )
         )
     return summaries
+
+
+@router.get(
+    "/{name}/health/history",
+    response_model=list[ServiceHealthRead],
+    summary="Recent health checks of a service, newest first",
+    responses=_UNKNOWN_SERVICE,
+)
+async def service_health_history(
+    service: Service, db: DbSession, limit: Annotated[int, Query(ge=1, le=100)] = 20
+) -> list[ServiceHealthRead]:
+    rows = await db.scalars(
+        select(ServiceHealth)
+        .where(ServiceHealth.service_name == service.name)
+        .order_by(ServiceHealth.timestamp.desc(), ServiceHealth.id.desc())
+        .limit(limit)
+    )
+    return [ServiceHealthRead.model_validate(row) for row in rows]
 
 
 @router.get(

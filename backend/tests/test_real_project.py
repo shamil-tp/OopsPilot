@@ -23,7 +23,7 @@ from app.schemas.services import ServiceHealthRead
 from app.services import health_probe, simulator
 from app.services.service_catalog import get_service, is_demo_service, service_names
 
-pytestmark = pytest.mark.usefixtures("clean_demo")
+pytestmark = pytest.mark.usefixtures("clean_demo", "isolated_real_projects")
 
 SERVICE = "mallutyping-web"
 REPO = "MrNihalT/mallutyping"
@@ -444,3 +444,26 @@ async def test_every_project_is_health_checked_and_one_failure_does_not_block_ot
         )
     }
     assert rows == {SERVICE: ServiceStatus.DOWN, EDTECH: ServiceStatus.HEALTHY}
+
+
+async def test_health_history_is_bounded_and_newest_first(
+    client: AsyncClient, db: AsyncSession, real: None
+) -> None:
+    now = datetime.now(UTC)
+    for i in range(25):
+        db.add(
+            ServiceHealth(
+                service_name=SERVICE,
+                timestamp=now - timedelta(minutes=i),
+                status=ServiceStatus.HEALTHY,
+                error_rate=0,
+                latency_ms=100 + i,
+            )
+        )
+    await db.commit()
+    rows = (await client.get(f"/api/services/{SERVICE}/health/history")).json()
+    assert len(rows) == 20 and rows[0]["latency_ms"] == 100 and rows[-1]["latency_ms"] == 119
+    assert (
+        await client.get(f"/api/services/{SERVICE}/health/history", params={"limit": 101})
+    ).status_code == 422
+    assert (await client.get("/api/services/nope/health/history")).status_code == 404

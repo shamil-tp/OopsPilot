@@ -17,7 +17,7 @@ from app.models.enums import DeploymentStatus, IncidentStatus, ServiceStatus, Se
 from app.services.service_catalog import get_service
 from tests.investigation_fakes import GOOD_RCA, GOOD_VERIFICATION, FakeProvider
 
-pytestmark = pytest.mark.usefixtures("clean_demo")
+pytestmark = pytest.mark.usefixtures("clean_demo", "isolated_real_projects")
 
 SERVICE = "mallutyping-web"
 OLD, NEW = "aaaaaaa", "bbbbbbb"

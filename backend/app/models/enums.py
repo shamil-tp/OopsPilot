@@ -103,6 +103,13 @@ class CicdConclusion(StrEnum):
     OTHER = "OTHER"
 
 
+class CodeReviewStatus(StrEnum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"  # nothing reviewable (e.g. only lockfiles, images or secrets files)
+
+
 class RecoveryStatus(StrEnum):
     RECOVERED = "RECOVERED"
     NOT_RECOVERED = "NOT_RECOVERED"

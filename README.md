@@ -57,6 +57,15 @@ Report ◀─ Verification (6 backend checks decide) ◀─ Execution (backend, 
 - **Incident report**: assembled from stored results with **no AI call**; Markdown/JSON download.
 - **Real-time dashboard**: WebSocket event stream with automatic REST polling fallback.
 - **Demo mode**: deterministic scenario, one-click reset, repeatable end to end.
+- **AI code review on every push** to a monitored project's main branch (1 Gemini call): each issue
+  with severity, file and line, explanation and how to fix it. Secrets are redacted before review;
+  findings feed later incidents as `R1`, `R2`, … evidence.
+- **Project pages**: live health, open code issues, incidents, reviews, deployments and GitHub
+  activity per project.
+- **PDF reports** for incidents, code reviews and projects (*Download PDF* → the browser's
+  *Save as PDF*).
+- **No CI/CD required** for monitored projects: a webhook (push + deployment statuses) and a
+  public URL are enough. GitHub Actions runs, if present, are used as extra evidence.
 
 ## Architecture
 
@@ -262,6 +271,12 @@ order return `409`. Details: [`docs/demo.md`](docs/demo.md).
 | `GET` | `/api/cicd/events` | Normalized CI/CD events (bounded filters) |
 | `GET` | `/api/cicd/events/{id}` | One CI/CD event |
 | `POST` | `/api/demo/reset` | Reset to a healthy environment with no incidents |
+| `GET` | `/api/services/projects` | Monitored real projects (name, URL, repository) |
+| `GET` | `/api/services/{name}/health/history` | Recent health checks (`limit` ≤ 100) |
+| `POST` | `/api/incidents/{id}/execution/confirm` | Operator marks the approved action as performed (real projects) |
+| `GET` | `/api/code-reviews` | AI code reviews of pushes, newest first (`service`, `limit` ≤ 50) |
+| `GET` | `/api/code-reviews/{id}` | One code review: summary, findings with fixes, files |
+| `POST` | `/api/code-reviews/{id}/retry` | Retry a FAILED review (409 otherwise) |
 
 Full reference: [`docs/api.md`](docs/api.md) and the OpenAPI docs at `/docs`.
 
@@ -285,6 +300,7 @@ All configuration comes from environment variables; see [`.env.example`](.env.ex
 | `MONITORED_PROJECTS` | The real applications OpsPilot watches, as JSON: `[{"name","service","url","repository"}, …]`. Each repo's webhook maps to its project and each URL is health-checked. Link events that arrived before mapping: `python -m scripts.link_cicd_events --apply` |
 | `MONITORED_PROJECT_NAME`, `MONITORED_ENVIRONMENT`, `MONITORED_SERVICE`, `MONITORED_SERVICE_URL` | The real application OpsPilot watches (e.g. `Mallu Typing`, `production`, `mallutyping-web`, `https://mallutyping.nihalt.in`); the backend health-checks the URL |
 | `INCIDENT_DOWN_CHECKS`, `INCIDENT_DEGRADED_CHECKS`, `AUTO_RESPOND`, `VERIFY_MIN_CHECKS` | Incident Manager for real projects: open an incident after 2 DOWN (or 3 failing) checks in a row; automatically investigate, analyse and propose, stopping at human approval; after the operator performs the approved action and clicks *Mark as done*, verify once 2 health checks follow it |
+| `CODE_REVIEW_ENABLED`, `GITHUB_TOKEN`, `CODE_REVIEW_MAX_DIFF_CHARS` | AI review of each push to a monitored project's default branch (1 Gemini call). `GITHUB_TOKEN` is optional (read-only; private repos and a higher GitHub rate limit); the diff is capped at 60 000 characters |
 | `MONITORED_HEALTH_INTERVAL_SECONDS`, `MONITORED_LATENCY_SLO_MS` | Health-check interval (60 s) and the latency above which a check counts as degraded (3000 ms) |
 | `CORS_ORIGINS` | Comma-separated origins allowed to call the API |
 | `NEXT_PUBLIC_API_URL` | API URL used by the browser (baked in at frontend build time) |
@@ -388,6 +404,9 @@ never appear in logs, API responses, WebSocket messages or the browser bundle (t
   approve a remediation. Put it behind authentication before exposing it.
 - **Shared database.** Reset clears all incidents in the configured database.
 - **Times are UTC** everywhere (dashboard, evidence, reports).
+- **Code review sends code to Gemini.** Only the changed lines of a push (secrets redacted,
+  secret files skipped) are sent, once per push; disable with `CODE_REVIEW_ENABLED=false`. The
+  review is advisory and can miss or misjudge issues.
 - **Ollama/Qwen** is designed for (provider interface) but not implemented.
 
 ## 👥 Team

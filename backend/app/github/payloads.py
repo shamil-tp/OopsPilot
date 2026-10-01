@@ -20,6 +20,7 @@ class Repository(_Payload):
     full_name: str = Field(max_length=140, pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     # Push events only: when the push happened (GitHub sends epoch seconds here).
     pushed_at: UtcDatetime | None = None
+    default_branch: str | None = None
 
 
 class User(_Payload):
