@@ -13,6 +13,7 @@ only if configured. Before anything reaches the AI:
 import re
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -136,6 +137,31 @@ def prepare(changes: list[dict[str, Any]], *, max_chars: int) -> PreparedDiff:
         prepared.truncated = True
     prepared.text = "\n".join(parts)
     return prepared
+
+
+async def fetch_file(
+    client: httpx.AsyncClient,
+    repository: str,
+    path: str,
+    ref: str,
+    token: str | None,
+    *,
+    max_bytes: int,
+) -> str | None:
+    """One file's text at a commit (for static checks), or None if unavailable or too large."""
+    if not _REPOSITORY.fullmatch(repository) or not _SHA.fullmatch(ref) or ".." in path:
+        return None
+    url = f"{API}/repos/{repository}/contents/{quote(path)}"
+    headers = {"Accept": "application/vnd.github.raw", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        response = await client.get(url, params={"ref": ref}, headers=headers)
+    except httpx.HTTPError:
+        return None
+    if response.status_code != 200 or len(response.content) > max_bytes:
+        return None
+    return response.content.decode("utf-8", "replace")
 
 
 async def fetch_changes(

@@ -127,9 +127,15 @@ def fake() -> FakeProvider:
 
 
 def github(
-    files: list[dict[str, Any]] = FILES, status: int = 200, seen: list[httpx.Request] | None = None
+    files: list[dict[str, Any]] = FILES,
+    status: int = 200,
+    seen: list[httpx.Request] | None = None,
+    sources: dict[str, str] | None = None,
 ) -> httpx.AsyncClient:
     def handler(request: httpx.Request) -> httpx.Response:
+        if "/contents/" in request.url.path:  # file text for the static syntax check
+            path = request.url.path.split("/contents/", 1)[1]
+            return httpx.Response(200, text=(sources or {}).get(path, "export const ok = 1;\n"))
         if seen is not None:
             seen.append(request)
         return httpx.Response(status, json={"files": files} if status == 200 else {"message": "x"})
@@ -370,3 +376,57 @@ async def test_review_appears_on_an_active_incident_and_in_its_evidence(
     assert (
         item.id == "R1" and "risk HIGH" in item.fact and "[high] src/app/page.tsx:11" in item.fact
     )
+
+
+# --- static syntax checks (parsed, never run) ----------------------------------------------------
+
+
+def test_static_check_finds_syntax_errors_without_running_code() -> None:
+    from app.services import static_checks
+
+    bad_py = static_checks.check("app/main.py", "def f(:\n    return 1\n")
+    assert bad_py and bad_py["severity"] == "critical" and bad_py["line"] == 1
+    assert bad_py["source"] == "static"
+    assert static_checks.check("app/main.py", "import os\nprint(os.name)\n") is None
+    assert static_checks.check("README.md", "not code (") is None
+    assert static_checks.checkable(
+        [
+            {"filename": "a.py", "status": "modified"},
+            {"filename": "b.py", "status": "removed"},
+            {"filename": "c.css", "status": "added"},
+        ]
+    ) == ["a.py"]
+
+
+def test_static_check_parses_jsx_and_tsx() -> None:
+    from app.services import static_checks
+
+    if static_checks._parser("javascript") is None:
+        pytest.skip("tree-sitter is not installed")
+    broken = "useEffect(() => {\n  load(\n}, []);\n"
+    finding = static_checks.check("src/main.jsx", broken)
+    assert finding and finding["file"] == "src/main.jsx" and finding["line"] >= 2
+    assert static_checks.check("src/main.jsx", "root.render(<App />);\n") is None
+    tsx = "const a: number = 1;\nexport default () => <p>{a}</p>;\n"
+    assert static_checks.check("src/page.tsx", tsx) is None
+    # A typo in a method name is valid syntax: only the AI review can catch that.
+    assert static_checks.check("src/main.jsx", "root.rnder(<App />);\n") is None
+
+
+async def test_syntax_error_in_a_push_becomes_a_critical_static_finding(
+    client: AsyncClient, fake: FakeProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import static_checks
+
+    if static_checks._parser("tsx") is None:
+        pytest.skip("tree-sitter is not installed")
+    broken = {"src/app/page.tsx": "export default function Page() {\n  return <p>{</p>;\n"}
+    async with github(sources=broken) as http:
+        await reviewed(client, monkeypatch, fake, http)
+
+    [review] = (await client.get("/api/code-reviews", params={"service": SERVICE})).json()
+    assert review["status"] == "COMPLETED" and review["risk"] == "HIGH"
+    first = review["findings"][0]
+    assert first["source"] == "static" and first["severity"] == "critical"
+    assert first["file"] == "src/app/page.tsx"
+    assert all(f["source"] == "ai" for f in review["findings"][1:])

@@ -536,6 +536,8 @@ export interface ReviewFinding {
   title: string;
   explanation: string;
   recommendation: string;
+  /** "static": the file failed the syntax check (parsed, never run); "ai": from the AI review. */
+  source?: "ai" | "static";
 }
 
 export interface CodeReview {

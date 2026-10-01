@@ -77,7 +77,9 @@ export function FindingList({ review }: { review: CodeReview }) {
             <Indicator tone={SEVERITY_TONE[finding.severity]}>
               <span className="font-medium uppercase">{finding.severity}</span>
             </Indicator>
-            <span className="text-xs text-muted">{label(finding.category)}</span>
+            <span className="text-xs text-muted">
+              {finding.source === "static" ? "Syntax check · not AI" : `${label(finding.category)} · AI review`}
+            </span>
             <a
               href={fileUrl(review, finding)}
               target="_blank"

@@ -24,6 +24,12 @@ class ReviewFinding(BaseModel):
     recommendation: str = Field(description="How to fix it, concretely")
 
 
+class StoredFinding(ReviewFinding):
+    """A finding as served: from the AI review or from the static syntax check."""
+
+    source: Literal["ai", "static"] = "ai"
+
+
 class CodeReviewAnalysis(BaseModel):
     """What the model returns (JSON schema sent to the provider)."""
 
@@ -47,7 +53,7 @@ class CodeReviewRead(BaseModel):
     status: CodeReviewStatus
     risk: RiskLevel | None
     summary: str | None
-    findings: list[ReviewFinding]
+    findings: list[StoredFinding]
     files: list[dict[str, Any]]
     skipped_files: list[dict[str, Any]]
     truncated: bool
