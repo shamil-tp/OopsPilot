@@ -295,7 +295,9 @@ export interface ExecutionResult {
   target: string;
   parameters: Record<string, unknown>;
   status: "executed";
-  simulated: true;
+  /** False for a real application: an operator performed the approved action. */
+  simulated: boolean;
+  performed_by: "opspilot" | "operator";
   service: string;
   before: ServiceSnapshot;
   after: ServiceSnapshot;
@@ -310,6 +312,10 @@ export interface ExecutionRun {
   completed_at: string | null;
   summary: string | null;
   result: ExecutionResult | null;
+  /** "operator": a real application; a human performs the approved action and confirms it. */
+  mode: "simulated" | "operator";
+  /** What the operator must do (operator mode, until confirmed). */
+  instructions: string | null;
 }
 
 export interface DecisionResponse {

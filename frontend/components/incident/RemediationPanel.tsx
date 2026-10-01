@@ -16,7 +16,7 @@ import {
 import { dateTime, describeAction, label, percent, str } from "@/lib/format";
 import type { ActionType, ApprovalStatus, EvidenceItem, ExecutionRun, IncidentStatus, RemediationRun } from "@/types/api";
 
-type Decision = "approve" | "reject";
+type Decision = "approve" | "reject" | "confirm";
 
 const APPROVAL_TONE: Record<ApprovalStatus, Tone> = { PENDING: "warn", APPROVED: "ok", REJECTED: "critical", EXPIRED: "neutral" };
 const APPROVE_LABEL: Partial<Record<ActionType, string>> = {
@@ -41,6 +41,7 @@ export function RemediationPanel({
   busy,
   error,
   onDecide,
+  onConfirm,
 }: {
   run: RemediationRun | null;
   execution: ExecutionRun | null;
@@ -48,7 +49,9 @@ export function RemediationPanel({
   evidence: EvidenceItem[];
   busy: Decision | null;
   error: string | null;
-  onDecide: (decision: Decision) => void;
+  onDecide: (decision: "approve" | "reject") => void;
+  /** Real applications: the operator reports the approved action as done. */
+  onConfirm: () => void;
 }) {
   const result = run?.result;
   if (!run || !result) {
@@ -132,7 +135,7 @@ export function RemediationPanel({
                   {busy === "reject" ? "Rejecting…" : "Reject"}
                 </Button>
                 <Button variant="primary" disabled={busy !== null} onClick={() => onDecide("approve")}>
-                  {busy === "approve" ? "Approving and executing…" : (APPROVE_LABEL[result.action] ?? "Approve")}
+                  {busy === "approve" ? "Approving…" : (APPROVE_LABEL[result.action] ?? "Approve")}
                 </Button>
               </div>
             </>
@@ -142,7 +145,7 @@ export function RemediationPanel({
               {approval.decided_at && ` · decided ${dateTime(approval.decided_at)}`}
             </p>
           )}
-          {error && (
+          {pending && error && (
             <div className="mt-3">
               <ErrorNote>{error}</ErrorNote>
             </div>
@@ -153,15 +156,54 @@ export function RemediationPanel({
       {execution && (
         <>
           <Subheading>Execution</Subheading>
-          <p className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink">
-            <Indicator tone={execution.status === "COMPLETED" ? "ok" : execution.status === "FAILED" ? "critical" : "info"}>
-              {label(execution.status)}
-            </Indicator>
-            <span>
-              {execution.summary ?? "Executing…"} <span className="text-muted">(simulated)</span>
-            </span>
-          </p>
-          {execution.result && <SnapshotCompare before={execution.result.before} after={execution.result.after} />}
+          {execution.mode === "operator" && execution.status === "RUNNING" ? (
+            <div className="rounded-md border border-l-4 border-amber-400 bg-panel p-4 sm:p-5" aria-labelledby="operator-title">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 id="operator-title" className="text-sm font-semibold text-ink">
+                  Operator action required
+                </h3>
+                <Indicator tone="warn">Waiting for you</Indicator>
+              </div>
+              <p className="mt-3 text-sm text-ink">{execution.instructions}</p>
+              <p className="mt-2 text-xs text-muted">
+                OpsPilot does not change your application. It records your confirmation, then verifies recovery
+                with the health checks that follow.
+              </p>
+              <div className="mt-4 flex justify-end">
+                <Button variant="primary" disabled={busy !== null} onClick={onConfirm}>
+                  {busy === "confirm" ? "Recording…" : "Mark as done"}
+                </Button>
+              </div>
+              {error && (
+                <div className="mt-3">
+                  <ErrorNote>{error}</ErrorNote>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink">
+                <Indicator
+                  tone={execution.status === "COMPLETED" ? "ok" : execution.status === "FAILED" ? "critical" : "info"}
+                >
+                  {label(execution.status)}
+                </Indicator>
+                <span>
+                  {execution.summary ?? "Executing…"}{" "}
+                  <span className="text-muted">
+                    {execution.mode === "operator" ? "(performed by an operator)" : "(simulated)"}
+                  </span>
+                </span>
+              </p>
+              {execution.result && (
+                <SnapshotCompare
+                  before={execution.result.before}
+                  after={execution.result.after}
+                  operator={execution.result.performed_by === "operator"}
+                />
+              )}
+            </>
+          )}
         </>
       )}
     </Section>

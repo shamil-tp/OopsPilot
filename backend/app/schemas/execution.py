@@ -1,4 +1,5 @@
-"""Human decision on a remediation proposal, and the backend's simulated execution of it."""
+"""Human decision on a remediation proposal, and its execution: by OpsPilot in the simulation,
+by a human operator for a real application."""
 
 from typing import Any, Literal
 
@@ -24,7 +25,10 @@ class ExecutionResult(BaseModel):
     target: str
     parameters: dict[str, Any] = Field(description="The approved parameters that were executed")
     status: Literal["executed"] = "executed"
-    simulated: Literal[True] = True
+    simulated: bool = True
+    # Real applications: OpsPilot never acts on them; an operator performs the approved action
+    # and confirms it, and verification measures the result.
+    performed_by: Literal["opspilot", "operator"] = "opspilot"
     service: str
     before: ServiceSnapshot
     after: ServiceSnapshot
@@ -39,6 +43,10 @@ class ExecutionRead(BaseModel):
     completed_at: UtcDatetime | None
     summary: str | None
     result: ExecutionResult | None
+    mode: Literal["simulated", "operator"] = "simulated"
+    instructions: str | None = Field(
+        default=None, description="What the operator must do (operator mode, before it is done)"
+    )
 
 
 class DecisionRead(BaseModel):

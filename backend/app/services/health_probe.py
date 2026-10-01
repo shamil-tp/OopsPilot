@@ -128,6 +128,10 @@ async def run_forever(session_factory: async_sessionmaker[AsyncSession] = Sessio
                         await check(
                             db, service, client=client, slo_ms=settings.monitored_latency_slo_ms
                         )
+                        # Imported here: the agents depend on services, not the other way round.
+                        from app.agents import incident_manager
+
+                        await incident_manager.after_check(db, service)
                 except Exception as exc:  # never take the API down; try again next interval
                     logger.warning(
                         "health_check_failed",

@@ -3,7 +3,7 @@ import { Dot, Empty, EvidenceRefs, evidenceIndex, Section, Subheading, table } f
 import { label } from "@/lib/format";
 import type { VerificationRun } from "@/types/api";
 
-export function VerificationPanel({ run }: { run: VerificationRun | null }) {
+export function VerificationPanel({ run, operator = false }: { run: VerificationRun | null; operator?: boolean }) {
   const result = run?.result;
   if (!run || !result) {
     return (
@@ -34,7 +34,7 @@ export function VerificationPanel({ run }: { run: VerificationRun | null }) {
       </p>
 
       <div className="mt-4">
-        <SnapshotCompare before={result.before} after={result.after} />
+        <SnapshotCompare before={result.before} after={result.after} operator={operator} />
       </div>
 
       <Subheading>Checks</Subheading>

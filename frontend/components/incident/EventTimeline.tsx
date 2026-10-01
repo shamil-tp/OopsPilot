@@ -14,6 +14,7 @@ const TONE: Record<string, Tone> = {
   incident_created: "critical",
   error: "critical",
   approval_required: "warn",
+  operator_action_required: "warn",
   incident_escalated: "warn",
   incident_resolved: "ok",
 };

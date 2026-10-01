@@ -25,6 +25,7 @@ from app.schemas.report import IncidentReportRead
 from app.schemas.root_cause import RootCauseRunRead
 from app.schemas.verification import VerificationRunRead
 from app.services import agent_events, incidents, simulator
+from app.services.service_catalog import is_demo_service
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -296,6 +297,11 @@ async def approve_remediation(incident_id: int, db: DbSession) -> DecisionRead:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
 
     if changed and run is not None:
+        incident = await incidents.get_incident(db, incident_id)
+        if incident is not None and not is_demo_service(incident.service_name):
+            # Real application: OpsPilot never acts on it. Record what the operator must do.
+            await approval_gate.request_operator(run.id)
+            return await approval_gate.decision_view(db, incident_id, approval.id)
         try:
             # Shielded: a client disconnect must not interrupt a half-applied execution.
             await asyncio.shield(approval_gate.execute(run.id))
@@ -324,6 +330,33 @@ async def reject_remediation(incident_id: int, db: DbSession) -> DecisionRead:
     except AgentConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     return await approval_gate.decision_view(db, incident_id, approval.id)
+
+
+@router.post(
+    "/{incident_id}/execution/confirm",
+    response_model=ExecutionRead,
+    summary="Operator: the approved action has been performed (real applications)",
+    description=(
+        "For a real application OpsPilot never executes remediation. After a human approves, an "
+        "operator performs the approved action (e.g. a rollback in the hosting platform) and calls "
+        "this endpoint. It takes no body, records the execution (REMEDIATING -> VERIFYING) and "
+        "measures the service; verification then needs fresh health checks. Idempotent."
+    ),
+    responses={
+        404: {"model": ErrorResponse, "description": "Incident not found"},
+        409: {"model": ErrorResponse, "description": "Nothing is waiting for an operator"},
+    },
+)
+async def confirm_execution(incident_id: int, db: DbSession) -> ExecutionRead:
+    try:
+        run = await approval_gate.confirm_operator(db, incident_id)
+    except IncidentNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    except AgentConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    view = await approval_gate.execution_view(db, run)
+    assert view is not None
+    return view
 
 
 @router.get(

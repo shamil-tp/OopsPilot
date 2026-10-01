@@ -13,7 +13,7 @@ import { RootCausePanel } from "@/components/incident/RootCausePanel";
 import { VerificationPanel } from "@/components/incident/VerificationPanel";
 import { Button, Empty, ErrorNote, Indicator, SeverityLabel, StatusIndicator } from "@/components/ui";
 import { type IncidentData, type LiveMode, useIncidentConsole } from "@/hooks/useIncidentConsole";
-import { analyze, ApiError, approve, investigate, reject, remediate, verify } from "@/lib/api";
+import { analyze, ApiError, approve, confirmExecution, investigate, reject, remediate, verify } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 
 type Step = "investigate" | "analyze" | "remediate" | "verify";
@@ -62,7 +62,9 @@ function stateHint(d: IncidentData): string | null {
     case "AWAITING_APPROVAL":
       return "Waiting for a human decision on the proposed remediation.";
     case "REMEDIATING":
-      return "Executing the approved remediation…";
+      return d.execution?.mode === "operator"
+        ? "Approved. Waiting for an operator to perform the action, then click Mark as done (Remediation)."
+        : "Executing the approved remediation…";
     case "RESOLVED":
       return "Resolved. Recovery was verified by the backend checks.";
     case "FAILED":
@@ -91,7 +93,7 @@ export function IncidentConsole({ incidentId }: { incidentId: number }) {
   const { data, error, loading, mode, refresh } = useIncidentConsole(incidentId);
   const [running, setRunning] = useState<Step | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
-  const [deciding, setDeciding] = useState<"approve" | "reject" | null>(null);
+  const [deciding, setDeciding] = useState<"approve" | "reject" | "confirm" | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
   const incident = data.incident;
@@ -121,6 +123,19 @@ export function IncidentConsole({ incidentId }: { incidentId: number }) {
     setDecisionError(null);
     try {
       await (decision === "approve" ? approve : reject)(incidentId);
+    } catch (err) {
+      setDecisionError(errorText(err));
+    } finally {
+      setDeciding(null);
+      await refresh();
+    }
+  }
+
+  async function confirm() {
+    setDeciding("confirm");
+    setDecisionError(null);
+    try {
+      await confirmExecution(incidentId);
     } catch (err) {
       setDecisionError(errorText(err));
     } finally {
@@ -207,8 +222,9 @@ export function IncidentConsole({ incidentId }: { incidentId: number }) {
             busy={deciding}
             error={decisionError}
             onDecide={(d) => void decide(d)}
+            onConfirm={() => void confirm()}
           />
-          <VerificationPanel run={data.verification} />
+          <VerificationPanel run={data.verification} operator={data.execution?.mode === "operator"} />
           {data.report && <ReportPanel report={data.report} />}
         </div>
       </div>

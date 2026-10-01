@@ -120,6 +120,15 @@ class Settings(BaseSettings):
     monitored_health_interval_seconds: float = Field(default=60, ge=15)
     # A check slower than this counts as degraded (cold starts on serverless hosts are slow).
     monitored_latency_slo_ms: float = Field(default=3000, gt=0)
+    # Incident Manager (real projects only): deterministic detection rules on health checks.
+    # An incident opens after this many consecutive DOWN checks, or DEGRADED/DOWN checks.
+    incident_down_checks: int = Field(default=2, ge=1, le=20)
+    incident_degraded_checks: int = Field(default=3, ge=1, le=20)
+    # Run investigation -> root cause -> remediation proposal automatically for a detected
+    # incident (stops at human approval), and verification once enough checks follow the action.
+    auto_respond: bool = True
+    # Health checks required after a remediation before recovery can be verified.
+    verify_min_checks: int = Field(default=2, ge=1, le=20)
 
     # Agent safety limits.
     max_agent_steps: int = Field(default=8, ge=1)

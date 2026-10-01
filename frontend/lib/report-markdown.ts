@@ -50,7 +50,7 @@ export function reportMarkdown(r: IncidentReportContent): string {
     "",
     "## Action taken",
     "",
-    `${outcome.remediation_performed ?? "—"} (simulated)`,
+    `${outcome.remediation_performed ?? "—"} (${execution.simulated ? "simulated" : "performed by an operator"})`,
     "",
     `- Before: ${snapshot(execution.before)}`,
     `- After: ${snapshot(execution.after)}`,

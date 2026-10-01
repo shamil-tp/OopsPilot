@@ -253,8 +253,13 @@ class EvidenceCollector:
                     fact=(
                         f"{snapshot.service_name} {snapshot.status} at "
                         f"{snapshot.timestamp:%H:%M:%S} ({relative(snapshot.timestamp, t0)}, "
-                        f"{label}): error_rate "
-                        f"{snapshot.error_rate:g}%, latency {snapshot.latency_ms:g} ms"
+                        f"{label}): "
+                        + (
+                            "failed health checks (last 10) "
+                            if snapshot.cpu_usage is None
+                            else "error_rate "
+                        )
+                        + f"{snapshot.error_rate:g}%, latency {snapshot.latency_ms:g} ms"
                         + (
                             f", cpu {snapshot.cpu_usage:g}%, memory {snapshot.memory_usage:g}%"
                             if snapshot.cpu_usage is not None and snapshot.memory_usage is not None

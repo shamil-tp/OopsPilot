@@ -37,6 +37,7 @@ from app.agents.common import (
     record_failure,
     reload,
 )
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models import AgentRun, Approval, Incident, ServiceHealth
@@ -316,14 +317,137 @@ async def execution_view(db: AsyncSession, run: AgentRun | None) -> ExecutionRea
         return None
     fresh = await reload(db, AgentRun, run.id)
     completed = fresh.status is AgentRunStatus.COMPLETED and fresh.output
+    result = ExecutionResult.model_validate(fresh.output) if completed else None
+    output = fresh.output or {}
+    operator = (result.performed_by == "operator") if result else bool(output.get("operator"))
     return ExecutionRead(
         run_id=fresh.id,
         status=fresh.status,
         started_at=fresh.started_at,
         completed_at=fresh.completed_at,
         summary=fresh.summary,
-        result=ExecutionResult.model_validate(fresh.output) if completed else None,
+        result=result,
+        mode="operator" if operator else "simulated",
+        instructions=None if result else output.get("instructions"),
     )
+
+
+# --- real applications: the approved action is performed by an operator --------------------------
+
+
+def operator_instructions(approval: Approval) -> str:
+    """Exactly what the approved action means for a real application (no automation exists)."""
+    p = approval.parameters
+    service = p.get("service", approval.target)
+    if approval.action_type is ActionType.ROLLBACK_DEPLOYMENT:
+        return (
+            f"Roll back {service} from {p.get('from_version')} to {p.get('to_version')}: in your "
+            f"hosting platform (e.g. Vercel → Deployments), promote or redeploy the production "
+            f"deployment of commit {p.get('to_version')}. Then click Mark as done."
+        )
+    return (
+        f"Restart {service}: redeploy its current production deployment in your hosting "
+        "platform. Then click Mark as done."
+    )
+
+
+async def request_operator(
+    run_id: int, *, session_factory: async_sessionmaker[AsyncSession] = SessionLocal
+) -> None:
+    """Approved action on a real service: record the state before it and what the operator must
+    do. OpsPilot changes nothing; the incident stays REMEDIATING until the operator confirms."""
+    async with session_factory() as db:
+        run = await _running_run(db, run_id)
+        incident = await reload(db, Incident, run.incident_id)
+        approval_id = int((run.output or {}).get("approval_id", 0))
+        approval = await reload(db, Approval, approval_id)
+        if incident is None or approval is None:
+            raise AgentConflictError("the approved remediation no longer exists")
+        service = str(approval.parameters.get("service") or incident.service_name)
+        before = await _snapshot(db, service)
+        instructions = operator_instructions(approval)
+        run.output = {
+            "approval_id": approval_id,
+            "operator": True,
+            "service": service,
+            "before": before.model_dump(mode="json"),
+            "instructions": instructions,
+        }
+        run.summary = "Waiting for an operator to perform the approved action"
+        EventRecorder(db, incident.id, AGENT).emit(
+            "operator_action_required",
+            f"Operator action required: {instructions}",
+            approval_id=approval_id,
+            execution_run_id=run_id,
+            action=approval.action_type,
+            parameters=approval.parameters,
+        )
+        await db.commit()
+        logger.info(
+            "operator_action_required", extra={"incident_id": incident.id, "run_id": run_id}
+        )
+
+
+async def confirm_operator(db: AsyncSession, incident_id: int) -> AgentRun:
+    """The operator reports the approved action as done. Idempotent; no AI; changes only
+    OpsPilot's records (REMEDIATING -> VERIFYING). Verification then measures the result."""
+    incident = await db.get(Incident, incident_id)
+    if incident is None:
+        raise IncidentNotFoundError(f"Incident {incident_id} not found")
+    ref = incident.reference
+    if is_demo_service(incident.service_name):
+        raise AgentConflictError(f"{ref} is simulated; OpsPilot executes its remediation itself")
+    run = await latest_run(db, incident_id, AGENT)
+    if run is not None and run.status is AgentRunStatus.COMPLETED:
+        return run
+    output = (run.output if run else None) or {}
+    if run is None or run.status is not AgentRunStatus.RUNNING or not output.get("operator"):
+        raise AgentConflictError(f"{ref} has no approved remediation waiting for an operator")
+    if not await lock_incident(db, incident_id, status=IncidentStatus.REMEDIATING):
+        raise AgentConflictError(f"{ref} is no longer REMEDIATING")
+    approval = await reload(db, Approval, int(output["approval_id"]))
+    assert approval is not None
+    params = dict(approval.parameters)
+    remediation_run_id = params.pop("remediation_run_id", None)
+    service = str(output.get("service") or incident.service_name)
+    at = now().replace(microsecond=0)
+    result = ExecutionResult(
+        incident_id=incident_id,
+        approval_id=approval.id,
+        remediation_run_id=remediation_run_id,
+        action=approval.action_type,
+        target=approval.target,
+        parameters=params,
+        simulated=False,
+        performed_by="operator",
+        service=service,
+        before=ServiceSnapshot.model_validate(output["before"]),
+        after=await _snapshot(db, service),
+        executed_at=at,
+    )
+    if not await claim_incident(
+        db, incident_id, expected=IncidentStatus.REMEDIATING, new=IncidentStatus.VERIFYING
+    ):
+        await db.rollback()
+        raise AgentConflictError(f"{ref} left REMEDIATING")
+    await complete_run(
+        db, run.id, summary=f"Operator: {_describe(result)}", output=result.model_dump(mode="json")
+    )
+    needed = get_settings().verify_min_checks
+    EventRecorder(db, incident_id, AGENT).emit(
+        "remediation_completed",
+        f"Operator confirmed: {_describe(result)}. Verification runs after {needed} health "
+        "check(s) recorded from now.",
+        approval_id=approval.id,
+        execution_run_id=run.id,
+        action=result.action,
+        parameters=result.parameters,
+        performed_by="operator",
+        next_step="verification",
+    )
+    await db.commit()
+    logger.info("operator_confirmed", extra={"incident_id": incident_id, "run_id": run.id})
+    return run
 
 
 async def decision_view(db: AsyncSession, incident_id: int, approval_id: int) -> DecisionRead:

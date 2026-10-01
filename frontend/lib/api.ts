@@ -122,6 +122,8 @@ export const remediate = (id: number) => post<RemediationRun>(`/api/incidents/${
 export const approve = (id: number) => post<DecisionResponse>(`/api/incidents/${id}/approve`);
 export const reject = (id: number) => post<DecisionResponse>(`/api/incidents/${id}/reject`);
 export const verify = (id: number) => post<VerificationRun>(`/api/incidents/${id}/verify`);
+/** Real applications: the operator has performed the approved action (no body). */
+export const confirmExecution = (id: number) => post<ExecutionRun>(`/api/incidents/${id}/execution/confirm`);
 
 // --- CI/CD telemetry (read-only; GitHub delivers events to the backend, never to the browser) ---
 

@@ -150,7 +150,8 @@ export function ReportPanel({ report }: { report: IncidentReport }) {
             ]}
           />
           <p className="mt-3 text-sm text-ink">
-            Executed: {outcome.remediation_performed ?? "nothing"} <span className="text-muted">(simulated)</span>
+            Executed: {outcome.remediation_performed ?? "nothing"}{" "}
+            <span className="text-muted">{execution.simulated ? "(simulated)" : "(performed by an operator)"}</span>
           </p>
         </Part>
 
@@ -158,7 +159,7 @@ export function ReportPanel({ report }: { report: IncidentReport }) {
           <p className="mb-3 text-sm text-ink">
             {passed} / {v.checks.length} backend checks passed. {v.reasoning_summary}
           </p>
-          <SnapshotCompare before={execution.before} after={v.after} />
+          <SnapshotCompare before={execution.before} after={v.after} operator={execution.performed_by === "operator"} />
         </Part>
 
         <Part title="Final outcome">

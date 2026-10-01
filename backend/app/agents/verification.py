@@ -17,6 +17,7 @@ the incident stays VERIFYING so verification can be retried.
 
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.common import (
@@ -36,9 +37,10 @@ from app.agents.evidence import relative
 from app.ai.base import AIProvider, GenerationOptions
 from app.ai.errors import AIProviderError
 from app.ai.factory import get_ai_provider
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
-from app.models import AgentRun, Approval, Incident
+from app.models import AgentRun, Approval, Incident, ServiceHealth
 from app.models.enums import (
     ActionType,
     AgentName,
@@ -61,6 +63,7 @@ from app.services import telemetry
 from app.services.agent_events import EventRecorder
 from app.services.remediation_policy import deployment_state
 from app.services.scenario import ERROR_RATE_THRESHOLD, LATENCY_SLO_MS
+from app.services.service_catalog import is_demo_service
 
 logger = get_logger(__name__)
 
@@ -101,6 +104,16 @@ async def start_verification(db: AsyncSession, incident_id: int) -> tuple[AgentR
         raise AgentConflictError(f"{ref} has no approved remediation to verify")
     if incident.status is not IncidentStatus.VERIFYING:
         raise AgentConflictError(f"{ref} is {incident.status}; verification requires VERIFYING")
+    if not is_demo_service(incident.service_name):
+        # A real service is judged only on health checks recorded after the operator's action.
+        needed = get_settings().verify_min_checks
+        executed_at = ExecutionResult.model_validate(execution.output).executed_at
+        have = len(await checks_since(db, incident.service_name, executed_at))
+        if have < needed:
+            raise AgentConflictError(
+                f"Waiting for health checks of {incident.service_name} after the remediation "
+                f"({have} of {needed}); verification starts automatically when they are in"
+            )
 
     # Serialize concurrent requests on the incident row, then re-check for a run another
     # request may have committed in the meantime.
@@ -268,6 +281,17 @@ async def run_verification(
             raise failure from None
 
 
+async def checks_since(db: AsyncSession, service: str, since: datetime) -> list[ServiceHealth]:
+    """Health checks of `service` recorded at or after `since`, oldest first (max 50)."""
+    rows = await db.scalars(
+        select(ServiceHealth)
+        .where(ServiceHealth.service_name == service, ServiceHealth.timestamp >= since)
+        .order_by(ServiceHealth.timestamp, ServiceHealth.id)
+        .limit(50)
+    )
+    return list(rows)
+
+
 async def _assess(
     db: AsyncSession,
     service: str,
@@ -285,6 +309,8 @@ async def _assess(
         return f"{ts:%H:%M:%S} ({relative(as_utc(ts), executed_at)} vs execution)"
 
     b = execution.before
+    # A real service's "error rate" is the share of failed health checks among the last 10.
+    rate = "failed health checks (last 10)" if not is_demo_service(service) else "error_rate"
 
     def num(value: float | None, unit: str) -> str:
         return f"{value:g}{unit}" if value is not None else "unknown"
@@ -309,7 +335,7 @@ async def _assess(
             source="health",
             service=service,
             timestamp=executed_at,
-            fact=f"{service} before remediation: {b.status}, error_rate {num(b.error_rate, '%')}, "
+            fact=f"{service} before remediation: {b.status}, {rate} {num(b.error_rate, '%')}, "
             f"latency {num(b.latency_ms, ' ms')}, active {b.active_version}",
             data=b.model_dump(mode="json"),
         ),
@@ -321,7 +347,7 @@ async def _assess(
                 source="health",
                 service=service,
                 timestamp=health.timestamp,
-                fact=f"{service} now: {health.status} at {t(health.timestamp)}, error_rate "
+                fact=f"{service} now: {health.status} at {t(health.timestamp)}, {rate} "
                 f"{health.error_rate:g}%, latency {health.latency_ms:g} ms",
                 data={
                     "status": health.status.value,
@@ -345,17 +371,25 @@ async def _assess(
     health_ids = ["V3"] if health is not None else []
     missing = "no health data"
 
+    real = not is_demo_service(service)
     remediation_ok = approval is not None and approval.status is ApprovalStatus.APPROVED
+    performed = (
+        "performed by an operator"
+        if execution.performed_by == "operator"
+        else "execution COMPLETED"
+    )
     checks = [
         RecoveryCheck(
             name="remediation_executed",
             passed=remediation_ok,
             expected="approved remediation executed",
-            actual=f"approval {approval.status if approval else 'missing'}, execution COMPLETED",
+            actual=f"approval {approval.status if approval else 'missing'}, {performed}",
             evidence_ids=["V1"],
         )
     ]
-    if execution.action is ActionType.ROLLBACK_DEPLOYMENT:
+    # A real application's deployment switch (e.g. a Vercel rollback) is not observable through
+    # GitHub events, so it is not checked; the operator's confirmation is check 1.
+    if execution.action is ActionType.ROLLBACK_DEPLOYMENT and not real:
         target = params.get("to_version")
         checks.append(
             RecoveryCheck(
@@ -366,6 +400,30 @@ async def _assess(
                 evidence_ids=["V4"] if active else [],
             )
         )
+    if real:
+        # Health checks measure availability, not request errors: every check recorded since
+        # the operator's action must have succeeded (and enough of them must exist).
+        settings = get_settings()
+        latency_slo = settings.monitored_latency_slo_ms
+        since = await checks_since(db, service, executed_at)
+        succeeded = sum(row.status is ServiceStatus.HEALTHY for row in since)
+        needed = settings.verify_min_checks
+        error_check = RecoveryCheck(
+            name="error_rate_recovered",
+            passed=len(since) >= needed and succeeded == len(since),
+            expected=f"every health check since the remediation succeeds (at least {needed})",
+            actual=f"{succeeded} of {len(since)} succeeded",
+            evidence_ids=["V2", *health_ids],
+        )
+    else:
+        latency_slo = LATENCY_SLO_MS
+        error_check = RecoveryCheck(
+            name="error_rate_recovered",
+            passed=health is not None and health.error_rate < ERROR_RATE_THRESHOLD,
+            expected=f"< {ERROR_RATE_THRESHOLD:g}% (was {num(b.error_rate, '%')})",
+            actual=f"{health.error_rate:g}%" if health else missing,
+            evidence_ids=["V2", *health_ids],
+        )
     checks += [
         RecoveryCheck(
             name="service_healthy",
@@ -374,17 +432,11 @@ async def _assess(
             actual=str(health.status) if health else missing,
             evidence_ids=health_ids,
         ),
-        RecoveryCheck(
-            name="error_rate_recovered",
-            passed=health is not None and health.error_rate < ERROR_RATE_THRESHOLD,
-            expected=f"< {ERROR_RATE_THRESHOLD:g}% (was {num(b.error_rate, '%')})",
-            actual=f"{health.error_rate:g}%" if health else missing,
-            evidence_ids=["V2", *health_ids],
-        ),
+        error_check,
         RecoveryCheck(
             name="latency_recovered",
-            passed=health is not None and health.latency_ms < LATENCY_SLO_MS,
-            expected=f"< {LATENCY_SLO_MS:g} ms (was {num(b.latency_ms, ' ms')})",
+            passed=health is not None and health.latency_ms < latency_slo,
+            expected=f"< {latency_slo:g} ms (was {num(b.latency_ms, ' ms')})",
             actual=f"{health.latency_ms:g} ms" if health else missing,
             evidence_ids=["V2", *health_ids],
         ),

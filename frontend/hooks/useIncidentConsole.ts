@@ -62,6 +62,7 @@ const REFRESH_ON = new Set([
   "root_cause_identified",
   "remediation_recommended",
   "approval_received",
+  "operator_action_required",
   "incident_escalated",
   "remediation_completed",
   "verification_completed",
@@ -90,7 +91,7 @@ async function fetchIncidentData(incidentId: number): Promise<IncidentData> {
     when(agents.has("investigation"), () => getInvestigation(incidentId)),
     when(agents.has("root_cause"), () => getAnalysis(incidentId)),
     when(agents.has("remediation"), () => getRemediation(incidentId)),
-    when(types.has("remediation_started"), () => getExecution(incidentId)),
+    when(types.has("remediation_started") || types.has("operator_action_required"), () => getExecution(incidentId)),
     when(agents.has("verification"), () => getVerification(incidentId)),
     when(types.has("verification_completed"), () => getReport(incidentId)),
     listCicdEvents({
