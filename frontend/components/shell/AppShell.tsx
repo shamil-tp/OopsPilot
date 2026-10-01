@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Dot, type Tone } from "@/components/ui";
+import { OpsPilotLogo } from "@/components/shell/Logo";
 import { useSystemHealth } from "@/hooks/useSystemHealth";
 import { API_URL } from "@/lib/config";
 
 const NAV = [
   { href: "/", label: "Overview", active: (path: string) => path === "/" },
   { href: "/incidents", label: "Incidents", active: (path: string) => path.startsWith("/incidents") },
+  { href: "/code-reviews", label: "Code reviews", short: "Reviews", active: (path: string) => path.startsWith("/code-reviews") },
 ];
 
 function NavLinks({ layout }: { layout: "sidebar" | "bar" }) {
@@ -30,7 +32,7 @@ function NavLinks({ layout }: { layout: "sidebar" | "bar" }) {
             aria-current={active ? "page" : undefined}
             className={`${base} ${active ? "bg-hover font-medium text-ink" : "text-muted hover:bg-hover hover:text-ink"}`}
           >
-            {item.label}
+            {layout === "bar" ? (item.short ?? item.label) : item.label}
           </Link>
         );
       })}
@@ -89,12 +91,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-10 border-b border-line bg-panel">
-        <div className="flex h-12 items-center gap-4 px-4 sm:px-6">
-          <Link href="/" className="text-[15px] font-semibold tracking-tight text-ink">
-            OpsPilot
+      <header className="sticky top-0 z-10 border-b border-line bg-panel print:hidden">
+        <div className="flex h-12 items-center gap-3 px-4 sm:gap-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-ink">
+            <OpsPilotLogo className="h-5 w-5 shrink-0" />
+            <span>OpsPilot</span>
           </Link>
-          <nav aria-label="Primary" className="flex items-center gap-1 lg:hidden">
+          <nav aria-label="Primary" className="flex min-w-0 items-center gap-0.5 sm:gap-1 lg:hidden">
             <NavLinks layout="bar" />
           </nav>
           <div className="ml-auto">
@@ -104,11 +107,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex flex-1">
-        <aside className="hidden w-52 shrink-0 flex-col border-r border-line bg-panel lg:flex">
+        <aside className="hidden w-52 shrink-0 flex-col border-r border-line bg-panel lg:flex print:hidden">
           <nav aria-label="Primary" className="flex flex-col gap-0.5 p-3">
             <NavLinks layout="sidebar" />
           </nav>
           <div className="mt-auto space-y-2 border-t border-line p-4 text-xs text-muted">
+            <div className="flex items-center gap-1.5 font-medium text-ink">
+              <OpsPilotLogo className="h-4 w-4 shrink-0" />
+              <span>OpsPilot</span>
+            </div>
             <p>AI-Powered Autonomous Incident Response &amp; DevOps Copilot</p>
             <a href={`${API_URL}/docs`} target="_blank" rel="noreferrer" className="inline-block hover:text-ink">
               API reference ↗
@@ -116,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 print:p-0">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>

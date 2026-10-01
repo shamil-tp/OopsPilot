@@ -2,7 +2,7 @@
 -- OpsPilot — complete database schema for Supabase PostgreSQL
 -- =============================================================================
 --
--- Equivalent to `alembic upgrade head` (migrations 0001 through 0005). Generated from
+-- Equivalent to `alembic upgrade head` (migrations 0001 through 0006). Generated from
 -- `alembic upgrade head --sql` and annotated. The Alembic migrations in
 -- backend/alembic/versions/ remain the source of truth; regenerate this file
 -- whenever a migration is added:
@@ -12,7 +12,7 @@
 --         alembic upgrade head --sql 2>/dev/null
 --
 -- Use EITHER this script OR `alembic upgrade head` on a database, not both.
--- The script records revision 0005 in `alembic_version`, so Alembic treats the
+-- The script records revision 0006 in `alembic_version`, so Alembic treats the
 -- database as fully migrated and future migrations apply normally.
 --
 -- Safety:
@@ -242,6 +242,38 @@ CREATE INDEX ix_cicd_events_service_name_occurred_at ON public.cicd_events (serv
 CREATE INDEX ix_cicd_events_workflow_run_id ON public.cicd_events (workflow_run_id);
 
 -- -----------------------------------------------------------------------------
+-- Migration 0006: AI code reviews of pushes (one row per repository + commit)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE public.code_reviews (
+    id SERIAL NOT NULL,
+    repository VARCHAR(140) NOT NULL,
+    service_name VARCHAR(64) NOT NULL,
+    cicd_event_id INTEGER,
+    commit_sha VARCHAR(40) NOT NULL,
+    base_sha VARCHAR(40),
+    branch VARCHAR(255),
+    commit_message VARCHAR(200),
+    author VARCHAR(100),
+    status VARCHAR(32) NOT NULL,      -- PENDING | COMPLETED | FAILED | SKIPPED
+    risk VARCHAR(32),                 -- LOW | MEDIUM | HIGH
+    summary TEXT,
+    findings JSONB NOT NULL,
+    files JSONB NOT NULL,
+    skipped_files JSONB NOT NULL,
+    truncated BOOLEAN NOT NULL,
+    model VARCHAR(80),
+    error VARCHAR(300),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_code_reviews PRIMARY KEY (id),
+    CONSTRAINT fk_code_reviews_cicd_event_id_cicd_events FOREIGN KEY(cicd_event_id) REFERENCES public.cicd_events (id) ON DELETE SET NULL,
+    CONSTRAINT uq_code_reviews_repository UNIQUE (repository, commit_sha)
+);
+
+CREATE INDEX ix_code_reviews_service_name_created_at ON public.code_reviews (service_name, created_at);
+
+-- -----------------------------------------------------------------------------
 -- Migration 0002: lock out Supabase's Data API (RLS on, no policies)
 -- -----------------------------------------------------------------------------
 
@@ -255,9 +287,10 @@ ALTER TABLE public.approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.incident_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cicd_events ENABLE ROW LEVEL SECURITY;  -- migration 0004
+ALTER TABLE public.code_reviews ENABLE ROW LEVEL SECURITY;  -- migration 0006
 
 -- Tell Alembic the schema is at the latest migration.
-INSERT INTO public.alembic_version (version_num) VALUES ('0005');
+INSERT INTO public.alembic_version (version_num) VALUES ('0006');
 
 COMMIT;
 
@@ -265,6 +298,6 @@ COMMIT;
 -- Verification (run separately after the script succeeds)
 -- -----------------------------------------------------------------------------
 -- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
---   -> 10 rows (9 OpsPilot tables + alembic_version), rowsecurity = true for all
+--   -> 11 rows (10 OpsPilot tables + alembic_version), rowsecurity = true for all
 -- SELECT version_num FROM public.alembic_version;
---   -> 0005
+--   -> 0006

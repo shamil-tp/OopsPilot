@@ -211,7 +211,7 @@ Event types so far: `incident_created`, `agent_started`, `tool_started`, `tool_c
 
 Both take **no request body**: they decide on the incident's stored `PENDING` approval, so the
 client can never choose the action, target, version or parameters. Approve executes the stored,
-re-validated parameters immediately (CLAUDE.md §18); no AI is called.
+re-validated parameters immediately (project spec §18); no AI is called.
 
 | Status | Approve | Reject |
 | --- | --- | --- |
@@ -406,3 +406,35 @@ one of the simulated services, plus CI/CD events of the demo repository
 | `GET` | `/api/cicd/events/{id}` | One event (`404` if unknown) |
 
 Setup and normalization rules: [github-webhooks.md](github-webhooks.md).
+
+## Code reviews
+
+Every `push` to the default branch of a repository listed in `MONITORED_PROJECTS` is reviewed once
+(unique per repository + commit) in the background: the diff is fetched from `api.github.com`,
+lockfiles and secret files are skipped, credentials are replaced with `[REDACTED]`, and one
+structured Gemini call returns a summary, a deployment risk and findings. Findings on files outside
+the diff are dropped; findings are sorted most severe first. A review never changes the repository.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/code-reviews` | Newest first. Filters: `service`; `limit` 1–50 (default 20) |
+| `GET` | `/api/code-reviews/{id}` | One review (`404` if unknown) |
+| `POST` | `/api/code-reviews/{id}/retry` | Re-run a `FAILED` review; `409` for any other status |
+
+```json
+{
+  "id": 1, "repository": "owner/repo", "service_name": "mallutyping-web",
+  "commit_sha": "acb9cf9…", "branch": "main", "status": "COMPLETED", "risk": "HIGH",
+  "summary": "…",
+  "findings": [{
+    "severity": "critical", "category": "bug", "file": "src/components/typing/PracticeArea.tsx",
+    "line": 433, "title": "Invalid React hook call", "explanation": "…", "recommendation": "…"
+  }],
+  "files": [{"filename": "…", "additions": 1, "deletions": 1}], "skipped_files": [], "truncated": false
+}
+```
+
+Status: `PENDING` → `COMPLETED` or `FAILED` (`error` holds a safe reason, e.g. a private repository
+without `GITHUB_TOKEN`); `SKIPPED` when nothing reviewable changed. During an incident on the same
+service, recent reviews are evidence (`R1`, `R2`, …) through the read-only `get_recent_code_reviews`
+tool.

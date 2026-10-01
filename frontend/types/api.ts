@@ -134,7 +134,14 @@ export type ActionType = "ROLLBACK_DEPLOYMENT" | "RESTART_SERVICE" | "NO_ACTION"
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 export type RecoveryStatus = "RECOVERED" | "NOT_RECOVERED" | "NOT_ATTEMPTED";
-export type EvidenceSource = "logs" | "health" | "deployments" | "previous_incidents" | "cicd" | "execution";
+export type EvidenceSource =
+  | "logs"
+  | "health"
+  | "deployments"
+  | "previous_incidents"
+  | "cicd"
+  | "code_review"
+  | "execution";
 
 export interface AgentEvent {
   id: number;
@@ -480,4 +487,50 @@ export interface WebhookStatus {
   service: string;
   supported_events: string[];
   max_payload_bytes: number;
+}
+
+// --- AI code review of pushes: app/schemas/code_review.py --------------------------------------
+
+export type FindingSeverity = "critical" | "high" | "medium" | "low" | "info";
+export type FindingCategory =
+  | "bug"
+  | "security"
+  | "performance"
+  | "reliability"
+  | "configuration"
+  | "maintainability"
+  | "testing";
+export type CodeReviewStatus = "PENDING" | "COMPLETED" | "FAILED" | "SKIPPED";
+
+export interface ReviewFinding {
+  severity: FindingSeverity;
+  category: FindingCategory;
+  file: string;
+  line: number | null;
+  title: string;
+  explanation: string;
+  recommendation: string;
+}
+
+export interface CodeReview {
+  id: number;
+  repository: string;
+  service_name: string;
+  cicd_event_id: number | null;
+  commit_sha: string;
+  base_sha: string | null;
+  branch: string | null;
+  commit_message: string | null;
+  author: string | null;
+  status: CodeReviewStatus;
+  risk: RiskLevel | null;
+  summary: string | null;
+  findings: ReviewFinding[];
+  files: { filename: string; status: string; additions: number; deletions: number }[];
+  skipped_files: { filename: string; reason: string }[];
+  truncated: boolean;
+  model: string | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
 }

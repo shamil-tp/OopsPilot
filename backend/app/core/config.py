@@ -130,6 +130,13 @@ class Settings(BaseSettings):
     # Health checks required after a remediation before recovery can be verified.
     verify_min_checks: int = Field(default=2, ge=1, le=20)
 
+    # AI code review of pushes to a monitored project's default branch (1 AI call per push).
+    # The diff is fetched from api.github.com; GITHUB_TOKEN (read-only) is only needed for
+    # private repositories or a higher rate limit. Secrets are redacted before review.
+    code_review_enabled: bool = True
+    github_token: SecretStr | None = None
+    code_review_max_diff_chars: int = Field(default=60_000, ge=2_000, le=400_000)
+
     # Agent safety limits.
     max_agent_steps: int = Field(default=8, ge=1)
     llm_max_retries: int = Field(default=2, ge=0)

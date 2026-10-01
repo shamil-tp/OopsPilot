@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { CicdTable } from "@/components/cicd/CicdTable";
+import { issueSummary } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
 import {
   Button,
@@ -26,6 +27,7 @@ import {
   getServiceHealth,
   getWebhookStatus,
   listCicdEvents,
+  listCodeReviews,
   listDeployments,
   listIncidents,
   listServices,
@@ -35,6 +37,7 @@ import {
 import { label, num, shortDateTime, TERMINAL } from "@/lib/format";
 import type {
   CicdEvent,
+  CodeReview,
   Deployment,
   DeploymentStatus,
   Incident,
@@ -59,6 +62,8 @@ interface Snapshot {
   deployments: Record<string, Deployment[]>;
   cicd: CicdEvent[];
   webhook: WebhookStatus;
+  /** Latest completed code review per service. */
+  reviews: Record<string, CodeReview>;
 }
 
 async function loadSnapshot(): Promise<Snapshot> {
@@ -66,12 +71,17 @@ async function loadSnapshot(): Promise<Snapshot> {
   const real = services.filter((s) => s.kind === "real");
   // Deployment history: every real project, or the demo's payment-api when there is none.
   const tracked = real.length > 0 ? real.map((s) => s.name) : services.slice(0, 1).map((s) => s.name);
-  const [healthList, deploymentLists, cicd, webhook] = await Promise.all([
+  const [healthList, deploymentLists, cicd, webhook, reviewList] = await Promise.all([
     Promise.all(services.map((s) => getServiceHealth(s.name))),
     Promise.all(tracked.map((name) => listDeployments(name))),
     listCicdEvents({ limit: 8 }),
     getWebhookStatus(),
+    real.length > 0 ? listCodeReviews({ limit: 30 }).catch(() => []) : Promise.resolve([]),
   ]);
+  const reviews: Record<string, CodeReview> = {};
+  for (const review of reviewList) {
+    if (review.status === "COMPLETED" && !reviews[review.service_name]) reviews[review.service_name] = review;
+  }
   return {
     projects,
     incidents,
@@ -80,6 +90,7 @@ async function loadSnapshot(): Promise<Snapshot> {
     deployments: Object.fromEntries(tracked.map((name, i) => [name, deploymentLists[i]])),
     cicd,
     webhook,
+    reviews,
   };
 }
 
@@ -162,6 +173,7 @@ function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
             <th scope="col" className={table.th}>Status</th>
             <th scope="col" className={`${table.th} text-right`}>Latency</th>
             <th scope="col" className={`${table.th} hidden text-right sm:table-cell`}>Failed checks</th>
+            <th scope="col" className={`${table.th} hidden md:table-cell`}>Code issues</th>
             <th scope="col" className={`${table.th} hidden md:table-cell`}>Version</th>
             <th scope="col" className={`${table.th} hidden text-right lg:table-cell`}>Last deployed (UTC)</th>
           </tr>
@@ -174,7 +186,9 @@ function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
             return (
               <tr key={service.name}>
                 <td className={table.td}>
-                  <span className="font-medium text-ink">{service.display_name}</span>
+                  <Link href={`/projects/${service.name}`} className="font-medium text-ink underline-offset-2 hover:underline">
+                    {service.display_name}
+                  </Link>
                   <span className="block text-xs text-muted">
                     {service.url ? (
                       <a href={service.url} target="_blank" rel="noreferrer" className="hover:text-ink hover:underline">
@@ -204,6 +218,17 @@ function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
                 <td className={`${table.td} ${table.mono} text-right whitespace-nowrap`}>{num(h?.latency_ms, " ms")}</td>
                 <td className={`${table.td} ${table.mono} hidden text-right sm:table-cell ${h && h.error_rate > 0 ? "text-red-700" : ""}`}>
                   {num(h?.error_rate, "%")}
+                </td>
+                <td className={`${table.td} hidden md:table-cell`}>
+                  {snapshot.reviews[service.name] ? (
+                    <Link href={`/code-reviews/${snapshot.reviews[service.name].id}`} className="hover:underline">
+                      <Indicator tone={issueSummary(snapshot.reviews[service.name]).tone}>
+                        {issueSummary(snapshot.reviews[service.name]).text}
+                      </Indicator>
+                    </Link>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
                 </td>
                 <td className={`${table.td} ${table.mono} hidden md:table-cell`}>{currentVersion(deployments)}</td>
                 <td className={`${table.td} hidden text-right whitespace-nowrap text-muted lg:table-cell`}>

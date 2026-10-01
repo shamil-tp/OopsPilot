@@ -204,7 +204,7 @@ POST /api/incidents/{id}/remediate        (requires a COMPLETED RCA; incident AN
 
 | Action | Risk (backend) | Approval (backend) | Executes | Incident after proposal |
 | --- | --- | --- | --- | --- |
-| `ROLLBACK_DEPLOYMENT` | MEDIUM (reversible, CLAUDE.md §7) | required: `rollback_deployment` is REQUIRES_HUMAN_APPROVAL | Phase 8, after approval | `AWAITING_APPROVAL` |
+| `ROLLBACK_DEPLOYMENT` | MEDIUM (reversible, project spec §7) | required: `rollback_deployment` is REQUIRES_HUMAN_APPROVAL | Phase 8, after approval | `AWAITING_APPROVAL` |
 | `RESTART_SERVICE` | MEDIUM | required: `restart_service` is REQUIRES_HUMAN_APPROVAL | Phase 8, after approval | `AWAITING_APPROVAL` |
 | `NO_ACTION` | LOW | none | never | stays `ANALYZING` |
 | `ESCALATE_TO_HUMAN` | LOW | none | never | `ESCALATED` |
@@ -224,7 +224,7 @@ POST /api/incidents/{id}/remediate        (requires a COMPLETED RCA; incident AN
 
 ### Approval record
 
-`approvals` stores `action_type`, `target` (the version being rolled back, as in CLAUDE.md, or the
+`approvals` stores `action_type`, `target` (the version being rolled back, as in the project spec, or the
 service to restart), backend `risk`, `reason`, `status = PENDING` and **`parameters`** (migration
 `0003`): the exact validated values a human will approve, e.g.
 `{"service": "payment-api", "from_version": "v1.8.2", "to_version": "v1.8.1", "remediation_run_id": 8}`.
@@ -246,7 +246,7 @@ as is (200, no AI call). Failures (AI, policy, database, unexpected) mark the ru
 
 ## Human approval and execution (`backend/app/agents/approval.py`, Phase 8)
 
-Deterministic backend logic in the orchestrator role (CLAUDE.md §9, §18). **No AI call**: the
+Deterministic backend logic in the orchestrator role (project spec §9, §18). **No AI call**: the
 action, target and parameters are the ones Phase 7 validated and stored on the approval.
 
 ```text
@@ -275,7 +275,7 @@ execution run is FAILED, an `error` event is stored, the incident becomes `FAILE
 
 | Action | Deployments | Logs | Health |
 | --- | --- | --- | --- |
-| Rollback v1.8.2 → v1.8.1 | v1.8.2 → `ROLLED_BACK`; v1.8.1 redeployed as a new SUCCEEDED record (same commit) | rollback started/completed, config reload, pool initialized, `POST /payment 200` | HEALTHY, 0.8% errors, 180 ms (CLAUDE.md §8/§26) |
+| Rollback v1.8.2 → v1.8.1 | v1.8.2 → `ROLLED_BACK`; v1.8.1 redeployed as a new SUCCEEDED record (same commit) | rollback started/completed, config reload, pool initialized, `POST /payment 200` | HEALTHY, 0.8% errors, 180 ms (project spec §8/§26) |
 | Restart | unchanged | restart started/restarted | unchanged: a restart does not fix a configuration, so no recovery is invented |
 
 Only database writes on the simulated services: no shell, no network, no real infrastructure.

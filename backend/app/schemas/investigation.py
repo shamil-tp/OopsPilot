@@ -9,7 +9,9 @@ from app.schemas.common import UtcDatetime
 from app.schemas.services import DeploymentRead
 
 # "execution" is used by verification (the approved remediation that was executed).
-EvidenceSource = Literal["logs", "health", "deployments", "previous_incidents", "cicd", "execution"]
+EvidenceSource = Literal[
+    "logs", "health", "deployments", "previous_incidents", "cicd", "code_review", "execution"
+]
 
 
 class PreviousIncidentRead(BaseModel):

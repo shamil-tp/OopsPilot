@@ -80,3 +80,29 @@ async def clean_demo(client: AsyncClient) -> None:
     """Start from the healthy demo baseline (no incidents) on the test database."""
     response = await client.post("/api/demo/reset")
     assert response.status_code == 200
+
+
+@pytest.fixture
+async def isolated_real_projects() -> AsyncIterator[None]:
+    """Real-project data is never removed by a demo reset (by design), so tests that create it
+    remove it themselves, before and after: incidents, telemetry and code reviews of non-demo
+    services, and CI/CD events of repositories other than the demo's."""
+    from sqlalchemy import delete
+
+    from app.github.demo import DEMO_REPOSITORY
+    from app.models import CicdEvent, CodeReview, Deployment, Incident, LogEntry, ServiceHealth
+    from app.services.service_catalog import DEMO_SERVICE_NAMES
+
+    async def purge() -> None:
+        async with SessionLocal() as session:
+            await session.execute(delete(CodeReview))
+            await session.execute(delete(CicdEvent).where(CicdEvent.repository != DEMO_REPOSITORY))
+            for model in (Incident, ServiceHealth, Deployment, LogEntry):
+                await session.execute(
+                    delete(model).where(model.service_name.not_in(DEMO_SERVICE_NAMES))
+                )
+            await session.commit()
+
+    await purge()
+    yield
+    await purge()

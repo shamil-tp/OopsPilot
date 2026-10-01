@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { SnapshotCompare } from "@/components/incident/SnapshotCompare";
-import { Button, Dot, Panel, RiskLabel, Section, StatusIndicator, table } from "@/components/ui";
+import { Button, Dot, Panel, PrintButton, RiskLabel, Section, StatusIndicator, table } from "@/components/ui";
 import { dateTime, describeAction, duration, label, num, percent, time } from "@/lib/format";
 import { download, reportMarkdown } from "@/lib/report-markdown";
 import type { EvidenceItem, IncidentReport } from "@/types/api";
@@ -31,7 +32,8 @@ function Facts({ items }: { items: [string, ReactNode][] }) {
 }
 
 /** The stored final report, laid out as an engineering incident report. */
-export function ReportPanel({ report }: { report: IncidentReport }) {
+/** `printable`: the stand-alone report page (PDF via the browser's "Save as PDF"). */
+export function ReportPanel({ report, printable = false }: { report: IncidentReport; printable?: boolean }) {
   const r = report.report;
   const { summary: s, root_cause: rca, remediation, approval, execution, verification: v, outcome } = r;
   const file = `${s.reference}-incident-report`;
@@ -44,7 +46,17 @@ export function ReportPanel({ report }: { report: IncidentReport }) {
       id="report"
       title="Incident report"
       aside={
-        <span className="flex gap-2">
+        <span className="flex gap-2 print:hidden">
+          {printable ? (
+            <PrintButton />
+          ) : (
+            <Link
+              href={`/incidents/${report.incident_id}/report`}
+              className="inline-flex items-center rounded-md border border-line-strong bg-panel px-2 py-1 text-xs font-medium text-ink hover:bg-hover"
+            >
+              PDF
+            </Link>
+          )}
           <Button className="px-2 py-1 text-xs" onClick={() => download(`${file}.md`, reportMarkdown(r), "text/markdown")}>
             Download .md
           </Button>

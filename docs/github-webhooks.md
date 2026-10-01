@@ -25,7 +25,7 @@ RCA Agent correlates deployment timing with failures ─▶ human-approved remed
 | `X-GitHub-Event` | Stored as | Notes |
 | --- | --- | --- |
 | `ping` | nothing | `200 {"status": "pong"}` (sent by GitHub when the webhook is created) |
-| `push` | `COMMIT` | branch or tag, head commit SHA, first line of the message, author login, up to 20 changed paths |
+| `push` | `COMMIT` | branch or tag, head commit SHA, first line of the message, author login, up to 20 changed paths; a push to a monitored project's default branch also starts an AI code review ([api.md](api.md#code-reviews)) |
 | `workflow_run` | `DEPLOYMENT`, `TEST` or `BUILD` | name/path `deploy\|release\|rollout` → DEPLOYMENT; `test` → TEST; otherwise BUILD |
 | `deployment_status` | `DEPLOYMENT` | GitHub Deployments API; `deployment.payload.service` / `.version` are honored |
 | anything else | nothing | `202 {"status": "ignored"}` |

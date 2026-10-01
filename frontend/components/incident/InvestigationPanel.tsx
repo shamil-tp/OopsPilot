@@ -8,6 +8,7 @@ const SOURCE_LABEL: Record<EvidenceSource, string> = {
   deployments: "Deployments",
   previous_incidents: "Previous incidents",
   cicd: "GitHub CI/CD",
+  code_review: "Code reviews",
   execution: "Execution",
 };
 const SOURCE_ORDER = Object.keys(SOURCE_LABEL) as EvidenceSource[];

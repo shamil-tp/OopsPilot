@@ -23,6 +23,7 @@ from typing import Any
 from app.models import Incident
 from app.models.enums import LogLevel, ServiceStatus, Severity
 from app.schemas.cicd import CicdEventRead
+from app.schemas.code_review import CodeReviewRead
 from app.schemas.common import as_utc
 from app.schemas.investigation import EvidenceItem, PreviousIncidentRead
 from app.schemas.services import DeploymentRead, LogEntryRead, ServiceHealthRead
@@ -39,6 +40,8 @@ MAX_DEPLOYMENTS = 3
 MAX_PREVIOUS_INCIDENTS = 3
 CICD_WINDOW = timedelta(hours=2)
 MAX_CICD_EVENTS = 5
+REVIEW_WINDOW = timedelta(hours=24)
+MAX_CODE_REVIEWS = 3
 # Metadata keys that add tokens but no diagnostic value.
 _NOISY_META = {"request_id"}
 
@@ -149,6 +152,17 @@ class EvidenceCollector:
             limit=MAX_CICD_EVENTS,
         )
 
+        # Code reviews exist only for real projects (pushes to their repositories).
+        reviews: list[CodeReviewRead] = []
+        if catalog is not None and catalog.kind == "real":
+            reviews = await self._tool(
+                "get_recent_code_reviews",
+                service=service,
+                since=t0 - REVIEW_WINDOW,
+                until=t0,
+                limit=MAX_CODE_REVIEWS,
+            )
+
         package.items += self._log_items(service, logs, deployments, t0)
         health = [(current, "current"), (baseline, "last healthy before incident")]
         health += [(snapshot, f"dependency of {service}") for _, snapshot in dependencies]
@@ -156,6 +170,7 @@ class EvidenceCollector:
         package.items += self._deployment_items(deployments, t0)
         package.items += self._previous_items(service, previous)
         package.items += self._cicd_items(cicd_events, t0)
+        package.items += self._review_items(reviews, t0)
         package.deployments = deployments
         package.previous_incidents = previous
         package.cicd_events = cicd_events
@@ -355,6 +370,32 @@ class EvidenceCollector:
                     timestamp=e.occurred_at,
                     fact=fact,
                     data=e.model_dump(mode="json", exclude={"delivery_id", "html_url"}),
+                )
+            )
+        return items
+
+    @staticmethod
+    def _review_items(reviews: list[CodeReviewRead], t0: datetime) -> list[EvidenceItem]:
+        items = []
+        for n, r in enumerate(reviews, start=1):
+            findings = "; ".join(
+                f"[{f.severity}] {f.file}{f':{f.line}' if f.line else ''} {f.title}"
+                for f in r.findings[:5]
+            )
+            items.append(
+                EvidenceItem(
+                    id=f"R{n}",
+                    source="code_review",
+                    service=r.service_name,
+                    timestamp=r.created_at,
+                    fact=(
+                        f"{r.created_at:%H:%M:%S} ({relative(r.created_at, t0)}) AI code review of "
+                        f"commit {r.commit_sha[:7]} on {r.branch or 'unknown'}: risk {r.risk}, "
+                        f"{len(r.findings)} finding(s)" + (f": {findings}" if findings else "")
+                    ),
+                    data=r.model_dump(
+                        mode="json", include={"id", "commit_sha", "risk", "findings"}
+                    ),
                 )
             )
         return items

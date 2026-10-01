@@ -36,6 +36,23 @@ body {
   border-radius: 4px;
 }
 
+/* PDF export (browser print, "Save as PDF"): document layout, no app chrome or buttons. */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  body {
+    background: #fff;
+    font-size: 11px;
+  }
+  tr,
+  li {
+    break-inside: avoid;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
