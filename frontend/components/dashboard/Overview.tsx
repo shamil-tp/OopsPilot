@@ -146,7 +146,7 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
     <Panel className="px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="status" aria-live="polite">
         <Dot tone={tone} className="h-2.5 w-2.5" />
-        <p className="font-pixel text-2xl leading-none text-term uppercase glow sm:text-3xl">{headline}</p>
+        <p className="text-lg font-semibold text-term">{headline}</p>
         {active[0] && (
           <p className="text-sm text-muted">
             <Link href={`/incidents/${active[0].id}`} className="font-mono text-ink underline underline-offset-2">
@@ -168,7 +168,7 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
         {facts.map((fact) => (
           <div key={fact.term} className="min-w-0 border border-line bg-canvas/60 px-3 py-2">
             <dt className="text-[11px] font-semibold tracking-wider text-muted uppercase">{fact.term}</dt>
-            <dd className={`mt-0.5 truncate text-lg font-bold text-term glow ${fact.mono ? "font-mono" : ""}`}>
+            <dd className={`mt-0.5 truncate text-lg font-semibold text-term ${fact.mono ? "font-mono" : ""}`}>
               {fact.value}
             </dd>
           </div>

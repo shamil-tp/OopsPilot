@@ -25,10 +25,7 @@ const COMMANDS: [string, string][] = [
 function Prompt({ children, cursor = false }: { children?: string; cursor?: boolean }) {
   return (
     <p className={cursor ? "cursor" : undefined}>
-      <span className="text-term">opspilot@prod</span>
-      <span className="text-muted">:</span>
-      <span className="text-sky-400">~</span>
-      <span className="text-muted">$ </span>
+      <span className="text-ink">opspilot-prod:~ ops$ </span>
       {children && <span className="text-ink">{children}</span>}
     </p>
   );
@@ -36,13 +33,14 @@ function Prompt({ children, cursor = false }: { children?: string; cursor?: bool
 
 /**
  * Dashboard banner: a terminal session with the OpsPilot banner and its workflow.
- * `live` is null while incident data is unavailable (loading, or the API is unreachable). */
+ * `live` is null while incident data is unavailable (loading, or the API is unreachable).
+ */
 export function TerminalHero({ live }: { live: boolean | null }) {
   return (
-    <div className="border border-line-strong bg-panel shadow-pixel">
-      <div className="flex items-center gap-3 border-b border-line-strong bg-hover px-3 py-1.5">
+    <div className="overflow-hidden rounded-[10px] border border-line-strong bg-panel shadow-pixel">
+      <div className="flex items-center gap-3 border-b border-black/60 bg-titlebar px-3 py-2">
         <WindowDots />
-        <p className="flex-1 truncate text-center text-xs text-muted">opspilot — zsh — 120×32</p>
+        <p className="flex-1 truncate text-center text-[13px] font-semibold text-muted">ops — -bash — 120×32</p>
         <span aria-hidden className="w-12" />
       </div>
 
@@ -50,7 +48,7 @@ export function TerminalHero({ live }: { live: boolean | null }) {
         <Prompt>opspilot --banner</Prompt>
         <pre
           aria-label="OpsPilot"
-          className="glow text-[7px] leading-[1.05] text-term sm:text-[10px] md:text-xs"
+          className="text-[7px] leading-[1.05] text-term sm:text-[10px] md:text-xs"
         >
           {BANNER}
         </pre>

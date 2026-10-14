@@ -39,10 +39,10 @@ export function OpsPilotLogo({ className = "h-6 w-6", ...props }: SVGProps<SVGSV
       aria-hidden="true"
       {...props}
     >
-      <rect width="16" height="16" fill="#05080a" />
-      <path d={pathFor("o")} fill="#0f2a1b" />
-      <path d={pathFor("#")} fill="#4af58a" />
-      <rect x="2" y="12" width="2" height="2" fill="#4af58a" />
+      <rect width="16" height="16" fill="#1e1e1e" />
+      <path d={pathFor("o")} fill="#3a3a3a" />
+      <path d={pathFor("#")} fill="#e8e8e8" />
+      <rect x="2" y="12" width="2" height="2" fill="#e8e8e8" />
     </svg>
   );
 }

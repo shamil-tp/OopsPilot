@@ -34,7 +34,7 @@ function NavLinks({ layout }: { layout: "sidebar" | "bar" }) {
             aria-current={active ? "page" : undefined}
             className={`${base} lowercase ${
               active
-                ? "border-term bg-term/10 text-term glow"
+                ? "border-cursor bg-hover text-term"
                 : "border-transparent text-muted hover:bg-hover hover:text-ink"
             }`}
           >
@@ -103,13 +103,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-10 border-b border-line-strong bg-panel/95 backdrop-blur print:hidden">
+      <header className="sticky top-0 z-10 border-b border-black/60 bg-titlebar print:hidden">
         <div className="flex h-14 items-center gap-3 px-4 sm:gap-4 sm:px-6">
           <WindowDots />
-          <Link href="/" className="flex items-center gap-2 font-pixel text-2xl leading-none text-term uppercase glow">
+          <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold text-term">
             <OpsPilotLogo className="h-7 w-7 shrink-0" />
             <span className="hidden sm:inline">OpsPilot</span>
-            <span aria-hidden className="hidden font-mono text-xs text-muted normal-case md:inline">— zsh — prod</span>
+            <span aria-hidden className="hidden font-mono text-xs text-muted normal-case md:inline">— -bash — prod</span>
           </Link>
           <nav aria-label="Primary" className="flex min-w-0 items-center gap-0.5 overflow-x-auto sm:gap-1 lg:hidden">
             <NavLinks layout="bar" />
@@ -123,13 +123,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex flex-1">
         <aside className="hidden w-56 shrink-0 flex-col border-r border-line-strong bg-panel lg:flex print:hidden">
           <p aria-hidden className="px-4 pt-4 pb-1 text-xs text-muted">
-            <span className="text-term">❯</span> ls ~/opspilot
+            ops$ ls ~/opspilot
           </p>
           <nav aria-label="Primary" className="flex flex-col gap-0.5 py-1">
             <NavLinks layout="sidebar" />
           </nav>
           <div className="mt-auto space-y-2 border-t border-line-strong bg-canvas/60 p-4 text-xs text-muted">
-            <div className="flex items-center gap-1.5 font-pixel text-xl leading-none text-term uppercase">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-term">
               <OpsPilotLogo className="h-5 w-5 shrink-0" />
               <span>OpsPilot</span>
             </div>

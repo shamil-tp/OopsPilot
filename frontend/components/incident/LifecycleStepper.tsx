@@ -18,10 +18,10 @@ export function LifecycleStepper({ status }: { status: IncidentStatus }) {
         {LIFECYCLE.map((step, i) => {
           const done = !offPath && i < index;
           const current = !offPath && i === index;
-          const bar = current ? CURRENT_BAR[STATUS_TONE[status]] : done ? "bg-term/70" : "bg-transparent";
+          const bar = current ? CURRENT_BAR[STATUS_TONE[status]] : done ? "bg-muted" : "bg-transparent";
           return (
             <li key={step} aria-current={current ? "step" : undefined} className="min-w-0">
-              <div className={`h-2.5 border border-line-strong ${bar}`} />
+              <div className={`h-2 rounded-sm border border-line-strong ${bar}`} />
               <span
                 className={`sr-only mt-1.5 truncate text-xs sm:not-sr-only sm:block ${
                   current ? "font-medium text-ink" : done ? "text-muted" : "text-subtle"

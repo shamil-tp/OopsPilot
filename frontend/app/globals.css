@@ -1,37 +1,30 @@
 @import "tailwindcss";
 
 /*
- * Terminal / CRT palette: near-black screen, phosphor-green text, windows framed like
- * terminal sessions. Color is still reserved for meaning:
+ * macOS Terminal palette: charcoal windows on a darker desk, light-gray text, gray title bars
+ * with traffic-light controls and a gray block cursor. Color is still reserved for meaning:
  * green = healthy/resolved, amber = needs attention/approval, red = failing, blue = in progress.
  */
 @theme inline {
   --font-sans: var(--font-geist-mono);
   --font-mono: var(--font-geist-mono);
-  --font-pixel: var(--font-vt323);
-  --font-pixel-body: var(--font-geist-mono);
 
-  --color-canvas: #05080a;
-  --color-panel: #0a110e;
-  --color-ink: #c6f6cf;
-  --color-muted: #6f9a7a;
-  --color-subtle: #44634d;
-  --color-line: #1b3024;
-  --color-line-strong: #2c5139;
-  --color-hover: #10201a;
-  --color-term: #4af58a;
+  --color-canvas: #141414;
+  --color-panel: #1e1e1e;
+  --color-ink: #e8e8e8;
+  --color-muted: #a0a0a0;
+  --color-subtle: #6e6e6e;
+  --color-line: #303030;
+  --color-line-strong: #3d3d3d;
+  --color-hover: #2a2a2a;
+  --color-term: #f5f5f5;
+  --color-titlebar: #323232;
+  --color-cursor: #a8a8a8;
 
-  /* Terminals are rectangles. */
-  --radius-xs: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-
-  --shadow-pixel: 0 0 0 1px rgb(74 245 138 / 0.06), 0 0 28px -10px rgb(74 245 138 / 0.35);
-  --shadow-pixel-sm: 0 0 12px -4px rgb(74 245 138 / 0.4);
-  --shadow-2xl: 0 0 0 1px #2c5139, 0 0 60px -10px rgb(74 245 138 / 0.35);
+  /* Soft macOS window shadow. */
+  --shadow-pixel: 0 0 0 1px rgb(0 0 0 / 0.5), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+  --shadow-pixel-sm: 0 2px 6px rgb(0 0 0 / 0.4);
+  --shadow-2xl: 0 0 0 1px rgb(0 0 0 / 0.6), 0 24px 60px -12px rgb(0 0 0 / 0.75);
 }
 
 :root {
@@ -40,30 +33,15 @@
 
 body {
   background-color: var(--color-canvas);
-  background-image: radial-gradient(ellipse at top, rgb(74 245 138 / 0.07), transparent 60%);
-  background-attachment: fixed;
   color: var(--color-ink);
   font-size: 13.5px;
   line-height: 1.55;
 }
 
-/* CRT scanlines over everything; purely decorative. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  pointer-events: none;
-  background: repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.18) 0 1px, transparent 1px 3px);
-}
-
 h1,
 h2 {
-  font-family: var(--font-pixel);
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  text-shadow: 0 0 8px rgb(74 245 138 / 0.45);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 tbody tr td {
@@ -78,8 +56,7 @@ tbody tr td {
   height: 1.05em;
   margin-left: 0.2em;
   vertical-align: -0.15em;
-  background: var(--color-term);
-  box-shadow: 0 0 8px rgb(74 245 138 / 0.6);
+  background: var(--color-cursor);
   animation: blink 1.05s steps(1) infinite;
 }
 
@@ -89,19 +66,15 @@ tbody tr td {
   }
 }
 
-.glow {
-  text-shadow: 0 0 10px rgb(74 245 138 / 0.55);
-}
-
 /* One visible, consistent keyboard focus style for every interactive element. */
 :where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-term);
+  outline: 2px solid #5b9dff;
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--color-term);
-  color: var(--color-canvas);
+  background: #3f638b;
+  color: #fff;
 }
 
 /* PDF export (browser print, "Save as PDF"): document layout, no app chrome or buttons. */
@@ -118,13 +91,6 @@ tbody tr td {
     background: #fff;
     color: #000;
     font-size: 11px;
-  }
-  body::after {
-    display: none;
-  }
-  h1,
-  h2 {
-    text-shadow: none;
   }
   tr,
   li {

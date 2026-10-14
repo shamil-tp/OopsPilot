@@ -89,10 +89,8 @@ export function PageHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <p aria-hidden className="mb-1 text-xs text-muted">
-          <span className="text-term">opspilot@prod</span>:<span className="text-sky-400">~</span>$ open
-        </p>
-        <h1 className="cursor text-4xl leading-none text-term sm:text-5xl">{title}</h1>
+        <p aria-hidden className="mb-1 text-xs text-muted">opspilot-prod:~ ops$ open</p>
+        <h1 className="cursor text-3xl leading-tight text-term sm:text-4xl">{title}</h1>
         {description && <p className="mt-2 text-sm text-muted"># {description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -118,17 +116,18 @@ export function Section({
     <section
       id={id}
       aria-labelledby={id ? `${id}-title` : undefined}
-      className={`min-w-0 scroll-mt-6 border border-line-strong bg-panel/80 shadow-pixel ${className}`}
+      className={`min-w-0 scroll-mt-6 overflow-hidden rounded-[10px] border border-line-strong bg-panel shadow-pixel ${className}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line-strong bg-hover px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-3">
-          <WindowDots />
-          <h2 id={id ? `${id}-title` : undefined} className="truncate text-xl leading-none text-term">
-            <span aria-hidden className="text-muted">~/</span>
-            {title}
-          </h2>
-        </div>
-        {aside && <div className="text-xs text-muted">{aside}</div>}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-black/60 bg-titlebar px-3 py-2">
+        <WindowDots />
+        <h2
+          id={id ? `${id}-title` : undefined}
+          className="min-w-0 flex-1 truncate text-center text-[13px] leading-none font-semibold text-muted"
+        >
+          {title}
+          <span aria-hidden className="font-normal text-subtle"> — bash</span>
+        </h2>
+        {aside ? <div className="text-xs text-muted">{aside}</div> : <span aria-hidden className="w-12" />}
       </div>
       <div className="p-3 sm:p-4">{children}</div>
     </section>
@@ -137,22 +136,22 @@ export function Section({
 
 /** A small uppercase label for sub-parts of a section. */
 export function Subheading({ children }: { children: ReactNode }) {
-  return <h3 className="mt-5 mb-2 text-xs font-semibold tracking-wider text-term uppercase before:text-muted before:content-['##_']">{children}</h3>;
+  return <h3 className="mt-5 mb-2 text-xs font-semibold tracking-wider text-term uppercase before:text-subtle before:content-['##_']">{children}</h3>;
 }
 
 /** The three window-control lights of a terminal title bar. */
 export function WindowDots() {
   return (
     <span aria-hidden className="flex shrink-0 gap-1.5">
-      <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
-      <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+      <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+      <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+      <span className="h-3 w-3 rounded-full bg-[#28c840]" />
     </span>
   );
 }
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`border border-line-strong bg-panel shadow-pixel ${className}`}>{children}</div>;
+  return <div className={`rounded-[10px] border border-line-strong bg-panel shadow-pixel ${className}`}>{children}</div>;
 }
 
 export function Empty({ children }: { children: ReactNode }) {
@@ -173,9 +172,9 @@ type ButtonVariant = "primary" | "secondary" | "quiet";
 
 const BUTTON: Record<ButtonVariant, string> = {
   primary:
-    "border border-term bg-term text-canvas shadow-pixel-sm hover:bg-[#7dffb0] disabled:border-line-strong disabled:bg-line disabled:text-muted",
-  secondary: "border border-term/50 text-term hover:bg-term/10 hover:border-term disabled:border-line disabled:text-subtle",
-  quiet: "border border-transparent text-muted hover:text-term disabled:text-subtle",
+    "border border-term bg-term text-canvas shadow-pixel-sm hover:bg-white disabled:border-line-strong disabled:bg-line disabled:text-muted",
+  secondary: "border border-line-strong bg-hover text-ink hover:border-subtle hover:bg-titlebar disabled:text-subtle",
+  quiet: "border border-transparent text-muted hover:text-ink disabled:text-subtle",
 };
 
 export function Button({
@@ -217,7 +216,7 @@ export function EvidenceRefs({ ids, evidence }: { ids: string[]; evidence: Map<s
             title={fact}
             tabIndex={0}
             aria-label={`Evidence ${id}: ${fact}`}
-            className="cursor-help border border-line-strong bg-canvas px-1 font-mono text-[11px] text-term no-underline"
+            className="cursor-help rounded border border-line-strong bg-hover px-1 font-mono text-[11px] text-muted no-underline"
           >
             {id}
           </abbr>
