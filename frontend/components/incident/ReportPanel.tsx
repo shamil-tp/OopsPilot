@@ -177,7 +177,7 @@ export function ReportPanel({ report, printable = false }: { report: IncidentRep
         <Part title="Final outcome">
           <p className="flex items-center gap-2 text-sm font-semibold">
             <Dot tone={outcome.recovered ? "ok" : "critical"} />
-            <span className={outcome.recovered ? "text-emerald-700" : "text-red-700"}>
+            <span className={outcome.recovered ? "text-emerald-400" : "text-red-400"}>
               {outcome.recovered
                 ? `${label(outcome.final_status)}: the approved remediation restored ${s.service}.`
                 : `${label(outcome.final_status)}: not recovered; human investigation required.`}

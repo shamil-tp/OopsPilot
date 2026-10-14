@@ -35,7 +35,7 @@ export function CicdEventModal({ event, isOpen, onClose }: CicdEventModalProps) 
   const repoLink = event.repository ? `https://github.com/${event.repository}` : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
       <div
         className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl border border-line bg-panel shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         role="dialog"

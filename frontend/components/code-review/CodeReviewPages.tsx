@@ -209,8 +209,8 @@ export function CodeReviewDetail({ reviewId }: { reviewId: number }) {
                         <Indicator tone="ok">Yes</Indicator>
                       </td>
                       <td className={`${table.td} ${table.mono} hidden text-right whitespace-nowrap sm:table-cell`}>
-                        <span className="text-emerald-700">+{f.additions}</span>{" "}
-                        <span className="text-red-700">-{f.deletions}</span>
+                        <span className="text-emerald-400">+{f.additions}</span>{" "}
+                        <span className="text-red-400">-{f.deletions}</span>
                       </td>
                     </tr>
                   ))}

@@ -1,40 +1,107 @@
-
 @import "tailwindcss";
 
 /*
- * Neutral, light engineering-tool palette. Color is reserved for meaning:
+ * Terminal / CRT palette: near-black screen, phosphor-green text, windows framed like
+ * terminal sessions. Color is still reserved for meaning:
  * green = healthy/resolved, amber = needs attention/approval, red = failing, blue = in progress.
  */
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-mono);
   --font-mono: var(--font-geist-mono);
+  --font-pixel: var(--font-vt323);
+  --font-pixel-body: var(--font-geist-mono);
 
-  --color-canvas: #f7f7f5;
-  --color-panel: #ffffff;
-  --color-ink: #18181b;
-  --color-muted: #71717a;
-  --color-subtle: #a1a1aa;
-  --color-line: #e4e4e7;
-  --color-line-strong: #d4d4d8;
-  --color-hover: #f4f4f2;
+  --color-canvas: #05080a;
+  --color-panel: #0a110e;
+  --color-ink: #c6f6cf;
+  --color-muted: #6f9a7a;
+  --color-subtle: #44634d;
+  --color-line: #1b3024;
+  --color-line-strong: #2c5139;
+  --color-hover: #10201a;
+  --color-term: #4af58a;
+
+  /* Terminals are rectangles. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+
+  --shadow-pixel: 0 0 0 1px rgb(74 245 138 / 0.06), 0 0 28px -10px rgb(74 245 138 / 0.35);
+  --shadow-pixel-sm: 0 0 12px -4px rgb(74 245 138 / 0.4);
+  --shadow-2xl: 0 0 0 1px #2c5139, 0 0 60px -10px rgb(74 245 138 / 0.35);
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
-  background: var(--color-canvas);
+  background-color: var(--color-canvas);
+  background-image: radial-gradient(ellipse at top, rgb(74 245 138 / 0.07), transparent 60%);
+  background-attachment: fixed;
   color: var(--color-ink);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+/* CRT scanlines over everything; purely decorative. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.18) 0 1px, transparent 1px 3px);
+}
+
+h1,
+h2 {
+  font-family: var(--font-pixel);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgb(74 245 138 / 0.45);
+}
+
+tbody tr td {
+  border-bottom-style: dashed;
+}
+
+/* Blinking block cursor: add class "cursor" to any element. */
+.cursor::after {
+  content: "";
+  display: inline-block;
+  width: 0.6em;
+  height: 1.05em;
+  margin-left: 0.2em;
+  vertical-align: -0.15em;
+  background: var(--color-term);
+  box-shadow: 0 0 8px rgb(74 245 138 / 0.6);
+  animation: blink 1.05s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.glow {
+  text-shadow: 0 0 10px rgb(74 245 138 / 0.55);
 }
 
 /* One visible, consistent keyboard focus style for every interactive element. */
 :where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--color-term);
   outline-offset: 2px;
-  border-radius: 4px;
+}
+
+::selection {
+  background: var(--color-term);
+  color: var(--color-canvas);
 }
 
 /* PDF export (browser print, "Save as PDF"): document layout, no app chrome or buttons. */
@@ -44,9 +111,20 @@ body {
 }
 
 @media print {
+  :root {
+    color-scheme: light;
+  }
   body {
     background: #fff;
+    color: #000;
     font-size: 11px;
+  }
+  body::after {
+    display: none;
+  }
+  h1,
+  h2 {
+    text-shadow: none;
   }
   tr,
   li {

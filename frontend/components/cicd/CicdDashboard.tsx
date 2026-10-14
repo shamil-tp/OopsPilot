@@ -175,7 +175,7 @@ export function CicdDashboard() {
         description="Live stream of GitHub commits, workflow runs, and production deployments captured via webhooks."
         actions={
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-line bg-canvas text-xs text-muted">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 border border-line-strong bg-canvas text-xs text-muted">
               <Dot tone="ok" className="h-2 w-2 animate-pulse" />
               <span>Live 10s</span>
             </div>
@@ -245,7 +245,7 @@ export function CicdDashboard() {
                 onClick={() => setCategoryFilter(tab.value)}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   active
-                    ? "bg-ink text-white"
+                    ? "bg-term text-canvas"
                     : "text-muted hover:bg-hover hover:text-ink"
                 }`}
               >
@@ -266,7 +266,7 @@ export function CicdDashboard() {
               id="service-filter"
               value={serviceFilter}
               onChange={(e) => setServiceFilter(e.target.value)}
-              className="rounded-md border border-line bg-canvas px-2.5 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-ink"
+              className="border border-line-strong bg-canvas px-2.5 py-1 text-xs text-ink focus:outline-none focus:border-term"
             >
               <option value="">All projects</option>
               {services.map((s) => (
@@ -286,7 +286,7 @@ export function CicdDashboard() {
               id="conclusion-filter"
               value={conclusionFilter}
               onChange={(e) => setConclusionFilter(e.target.value)}
-              className="rounded-md border border-line bg-canvas px-2.5 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-ink"
+              className="border border-line-strong bg-canvas px-2.5 py-1 text-xs text-ink focus:outline-none focus:border-term"
             >
               <option value="ALL">All outcomes</option>
               <option value="SUCCESS">Success</option>
@@ -302,7 +302,7 @@ export function CicdDashboard() {
               placeholder="Filter by commit, branch, author, or SHA…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-md border border-line bg-canvas px-3 py-1 text-xs text-ink placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-ink"
+              className="w-full border border-line-strong bg-canvas px-3 py-1 text-xs text-ink placeholder:text-muted focus:outline-none focus:border-term"
             />
           </div>
 

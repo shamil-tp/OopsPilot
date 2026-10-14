@@ -25,7 +25,7 @@ export function VerificationPanel({ run, operator = false }: { run: Verification
     <Section id="verification" title="Verification" aside="Outcome decided by backend checks">
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1" role="status">
         <Dot tone={result.recovered ? "ok" : "critical"} className="h-2.5 w-2.5" />
-        <span className={`text-base font-semibold ${result.recovered ? "text-emerald-700" : "text-red-700"}`}>
+        <span className={`text-base font-semibold ${result.recovered ? "text-emerald-400" : "text-red-400"}`}>
           {result.recovered ? "Recovered" : "Not recovered"}
         </span>
         <span className="text-sm text-muted">
@@ -54,7 +54,7 @@ export function VerificationPanel({ run, operator = false }: { run: Verification
                 <td className={table.td}>{label(check.name)}</td>
                 <td className={`${table.td} hidden font-mono text-xs text-muted sm:table-cell`}>{check.expected}</td>
                 <td className={`${table.td} font-mono text-xs`}>{check.actual}</td>
-                <td className={`${table.td} text-right text-xs font-semibold ${check.passed ? "text-emerald-700" : "text-red-700"}`}>
+                <td className={`${table.td} text-right text-xs font-semibold ${check.passed ? "text-emerald-400" : "text-red-400"}`}>
                   {check.passed ? "Pass" : "Fail"}
                 </td>
               </tr>

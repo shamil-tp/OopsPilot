@@ -16,7 +16,7 @@ export function SnapshotCompare({
   after: ServiceSnapshot;
   operator?: boolean;
 }) {
-  const tone = (s: ServiceSnapshot) => (s.status === "HEALTHY" ? "text-emerald-700" : s.status ? "text-red-700" : "");
+  const tone = (s: ServiceSnapshot) => (s.status === "HEALTHY" ? "text-emerald-400" : s.status ? "text-red-400" : "");
   const unchanged = operator && after.active_version === before.active_version;
   const rows = [
     { metric: "Service", before: <ServiceStatusIndicator status={before.status} />, after: <ServiceStatusIndicator status={after.status} /> },

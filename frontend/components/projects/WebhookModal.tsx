@@ -26,7 +26,7 @@ export function WebhookModal({ isOpen, onClose, repository, serviceName }: Webho
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
       <div
         className="w-full max-w-lg rounded-xl border border-line bg-panel shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         role="dialog"
@@ -106,7 +106,7 @@ export function WebhookModal({ isOpen, onClose, repository, serviceName }: Webho
                 href={githubSetupUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:underline"
               >
                 Open GitHub Webhook Settings ↗
               </a>

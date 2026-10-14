@@ -2,7 +2,7 @@ import { STATUS_TONE } from "@/components/ui";
 import { label, LIFECYCLE } from "@/lib/format";
 import type { IncidentStatus } from "@/types/api";
 
-const CURRENT_BAR = { ok: "bg-emerald-600", warn: "bg-amber-500", critical: "bg-red-600", info: "bg-blue-600", neutral: "bg-zinc-400" };
+const CURRENT_BAR = { ok: "bg-emerald-400", warn: "bg-amber-400 animate-pulse", critical: "bg-red-500 animate-pulse", info: "bg-sky-400 animate-pulse", neutral: "bg-zinc-500" };
 
 /** The backend lifecycle as a segmented progress bar. FAILED/ESCALATED are shown as reported. */
 export function LifecycleStepper({ status }: { status: IncidentStatus }) {
@@ -18,10 +18,10 @@ export function LifecycleStepper({ status }: { status: IncidentStatus }) {
         {LIFECYCLE.map((step, i) => {
           const done = !offPath && i < index;
           const current = !offPath && i === index;
-          const bar = current ? CURRENT_BAR[STATUS_TONE[status]] : done ? "bg-zinc-700" : "bg-line";
+          const bar = current ? CURRENT_BAR[STATUS_TONE[status]] : done ? "bg-term/70" : "bg-transparent";
           return (
             <li key={step} aria-current={current ? "step" : undefined} className="min-w-0">
-              <div className={`h-1 rounded-full ${bar}`} />
+              <div className={`h-2.5 border border-line-strong ${bar}`} />
               <span
                 className={`sr-only mt-1.5 truncate text-xs sm:not-sr-only sm:block ${
                   current ? "font-medium text-ink" : done ? "text-muted" : "text-subtle"
@@ -35,7 +35,7 @@ export function LifecycleStepper({ status }: { status: IncidentStatus }) {
         })}
       </ol>
       {offPath && (
-        <p className="mt-2 hidden text-xs text-amber-700 sm:block">
+        <p className="mt-2 hidden text-xs text-amber-400 sm:block">
           The incident left the normal lifecycle: <span className="font-medium">{label(status)}</span>
         </p>
       )}

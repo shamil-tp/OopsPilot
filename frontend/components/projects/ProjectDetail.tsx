@@ -175,7 +175,7 @@ export function ProjectDetail({ service }: { service: string }) {
             <DeployFailedBadge event={lastDeploy} />
           </p>
           {risk && (
-            <p className="w-full text-sm text-red-800">
+            <p className="w-full text-sm text-red-400">
               {risk.severity === "critical" ? "Critical" : "High-risk"} code issue in the latest push (
               {reviewed?.commit_sha.slice(0, 7)}).{" "}
               {lastDeploy && (lastDeploy.conclusion === "FAILURE" || lastDeploy.conclusion === "TIMED_OUT")

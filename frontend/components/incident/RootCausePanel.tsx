@@ -4,7 +4,7 @@ import type { EvidenceItem, RootCauseRun } from "@/types/api";
 
 const ASSESSMENT_CLASS = {
   ruled_out: "text-muted",
-  less_likely: "text-amber-700",
+  less_likely: "text-amber-400",
   not_assessable: "text-muted",
 } as const;
 

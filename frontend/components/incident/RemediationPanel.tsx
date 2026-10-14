@@ -88,7 +88,7 @@ export function RemediationPanel({
 
       {approval && (
         <div
-          className={`mt-5 rounded-md border bg-panel p-4 sm:p-5 ${pending ? "border-amber-400 border-l-4" : "border-line"}`}
+          className={`mt-5 rounded-md border bg-panel p-4 sm:p-5 ${pending ? "border-amber-500 border-l-4" : "border-line"}`}
           aria-labelledby="approval-title"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -157,7 +157,7 @@ export function RemediationPanel({
         <>
           <Subheading>Execution</Subheading>
           {execution.mode === "operator" && execution.status === "RUNNING" ? (
-            <div className="rounded-md border border-l-4 border-amber-400 bg-panel p-4 sm:p-5" aria-labelledby="operator-title">
+            <div className="rounded-md border border-l-4 border-amber-500 bg-panel p-4 sm:p-5" aria-labelledby="operator-title">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id="operator-title" className="text-sm font-semibold text-ink">
                   Operator action required

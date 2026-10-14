@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CicdTable, DeployFailedBadge, latestDeployments } from "@/components/cicd/CicdTable";
 import { CodeRiskBadge, codeRisk, issueSummary } from "@/components/code-review/Findings";
 import { IncidentTable } from "@/components/incidents/IncidentTable";
+import { TerminalHero } from "@/components/dashboard/TerminalHero";
 import { AddProjectModal } from "@/components/projects/AddProjectModal";
 import {
   Button,
@@ -145,7 +146,7 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
     <Panel className="px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="status" aria-live="polite">
         <Dot tone={tone} className="h-2.5 w-2.5" />
-        <p className="text-base font-semibold text-ink">{headline}</p>
+        <p className="font-pixel text-2xl leading-none text-term uppercase glow sm:text-3xl">{headline}</p>
         {active[0] && (
           <p className="text-sm text-muted">
             <Link href={`/incidents/${active[0].id}`} className="font-mono text-ink underline underline-offset-2">
@@ -163,11 +164,11 @@ function ProductionStatus({ snapshot }: { snapshot: Snapshot }) {
           </p>
         )}
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-dashed border-line-strong pt-4 sm:grid-cols-4">
         {facts.map((fact) => (
-          <div key={fact.term} className="min-w-0">
-            <dt className="text-xs text-muted">{fact.term}</dt>
-            <dd className={`mt-0.5 truncate text-[15px] font-medium text-ink ${fact.mono ? "font-mono" : ""}`}>
+          <div key={fact.term} className="min-w-0 border border-line bg-canvas/60 px-3 py-2">
+            <dt className="text-[11px] font-semibold tracking-wider text-muted uppercase">{fact.term}</dt>
+            <dd className={`mt-0.5 truncate text-lg font-bold text-term glow ${fact.mono ? "font-mono" : ""}`}>
               {fact.value}
             </dd>
           </div>
@@ -242,7 +243,7 @@ function ProjectsTable({ snapshot }: { snapshot: Snapshot }) {
                   </span>
                 </td>
                 <td className={`${table.td} ${table.mono} text-right whitespace-nowrap`}>{num(h?.latency_ms, " ms")}</td>
-                <td className={`${table.td} ${table.mono} hidden text-right sm:table-cell ${h && h.error_rate > 0 ? "text-red-700" : ""}`}>
+                <td className={`${table.td} ${table.mono} hidden text-right sm:table-cell ${h && h.error_rate > 0 ? "text-red-400" : ""}`}>
                   {num(h?.error_rate, "%")}
                 </td>
                 <td className={`${table.td} hidden md:table-cell`}>
@@ -348,6 +349,7 @@ export function Overview() {
 
   return (
     <div className="flex flex-col gap-8">
+      <TerminalHero live={snapshot ? snapshot.incidents.some((i) => !TERMINAL.includes(i.status)) : null} />
       <div className="flex flex-col gap-3">
         <PageHeader
           title={single?.name ?? "Overview"}
@@ -394,7 +396,7 @@ export function Overview() {
                     {busy === "reset" ? "Resetting…" : "Reset demo"}
                   </Button>
                   <Button variant="primary" disabled={busy !== null} onClick={() => void simulate()}>
-                    {busy === "simulate" ? "Simulating…" : "Simulate incident"}
+                    {busy === "simulate" ? "Simulating…" : "▶ simulate incident"}
                   </Button>
                 </>
               )}
@@ -484,12 +486,12 @@ export function Overview() {
                               <ServiceStatusIndicator status={h?.status ?? null} />
                             </td>
                             <td
-                              className={`${table.td} ${table.mono} text-right ${h && h.error_rate >= ERROR_RATE_LIMIT ? "text-red-700" : ""}`}
+                              className={`${table.td} ${table.mono} text-right ${h && h.error_rate >= ERROR_RATE_LIMIT ? "text-red-400" : ""}`}
                             >
                               {num(h?.error_rate, "%")}
                             </td>
                             <td
-                              className={`${table.td} ${table.mono} text-right ${h && h.latency_ms >= LATENCY_LIMIT_MS ? "text-red-700" : ""}`}
+                              className={`${table.td} ${table.mono} text-right ${h && h.latency_ms >= LATENCY_LIMIT_MS ? "text-red-400" : ""}`}
                             >
                               {num(h?.latency_ms, " ms")}
                             </td>

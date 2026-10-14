@@ -78,7 +78,7 @@ export function AddProjectModal({ isOpen, onClose, onProjectAdded }: AddProjectM
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
       <div
         className="w-full max-w-xl rounded-xl border border-line bg-panel shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         role="dialog"
@@ -109,7 +109,7 @@ export function AddProjectModal({ isOpen, onClose, onProjectAdded }: AddProjectM
 
               <div>
                 <label htmlFor="project-name" className="block text-xs font-medium text-ink mb-1">
-                  Project Name <span className="text-red-500">*</span>
+                  Project Name <span className="text-red-400">*</span>
                 </label>
                 <input
                   id="project-name"
@@ -155,7 +155,7 @@ export function AddProjectModal({ isOpen, onClose, onProjectAdded }: AddProjectM
 
               <div>
                 <label htmlFor="github-repo" className="block text-xs font-medium text-ink mb-1">
-                  GitHub Repository <span className="text-red-500">*</span>
+                  GitHub Repository <span className="text-red-400">*</span>
                 </label>
                 <input
                   id="github-repo"
@@ -196,7 +196,7 @@ export function AddProjectModal({ isOpen, onClose, onProjectAdded }: AddProjectM
             </form>
           ) : (
             <div className="flex flex-col gap-5">
-              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900">
+              <div className="rounded-lg bg-emerald-950/40 border border-emerald-700 p-3 text-xs text-emerald-400">
                 <span className="font-semibold">{result.project.name}</span> has been added to monitored projects!
               </div>
 
@@ -264,7 +264,7 @@ export function AddProjectModal({ isOpen, onClose, onProjectAdded }: AddProjectM
                     href={result.webhook.github_setup_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:underline"
                   >
                     Open GitHub Webhook Settings ↗
                   </a>

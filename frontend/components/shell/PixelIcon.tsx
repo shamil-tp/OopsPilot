@@ -1,0 +1,236 @@
+import type { SVGProps } from "react";
+
+/**
+ * Pixel-art icons drawn on a 16×16 grid. Each icon is a list of rows; "#" is an ink pixel,
+ * "o" a white (paper) pixel, anything else transparent. Rendered as crisp SVG rects.
+ */
+const ICONS = {
+  server: [
+    "................",
+    ".##############.",
+    ".#oooooooooooo#.",
+    ".#o##o#oooo#oo#.",
+    ".#oooooooooooo#.",
+    ".##############.",
+    ".#oooooooooooo#.",
+    ".#o##o#oooo#oo#.",
+    ".#oooooooooooo#.",
+    ".##############.",
+    ".#oooooooooooo#.",
+    ".#o##o#oooo#oo#.",
+    ".#oooooooooooo#.",
+    ".##############.",
+    "......####......",
+    "....########....",
+  ],
+  terminal: [
+    "................",
+    "################",
+    "#oooooooooooooo#",
+    "################",
+    "#oooooooooooooo#",
+    "#o#oooooooooooo#",
+    "#oo#ooooooooooo#",
+    "#ooo#oooooooooo#",
+    "#oo#ooooooooooo#",
+    "#o#ooo#####oooo#",
+    "#oooooooooooooo#",
+    "#oooooooooooooo#",
+    "#oooooooooooooo#",
+    "################",
+    "................",
+    "................",
+  ],
+  bug: [
+    "................",
+    "...#........#...",
+    "....#......#....",
+    ".....######.....",
+    "....#oooooo#....",
+    "#..#oo#oo#oo#..#",
+    ".#.#oooooooo#.#.",
+    "..##########....",
+    ".#.#oooo#ooo#.#.",
+    "#..#oooo#ooo#..#",
+    "...#oooo#ooo#...",
+    ".#.#oooo#ooo#.#.",
+    "#...#ooo#oo#...#",
+    ".....######.....",
+    "................",
+    "................",
+  ],
+  rocket: [
+    "...........####.",
+    ".........##oo##.",
+    "........#oooo##.",
+    ".......#oo##o#..",
+    "......#oo#oo#...",
+    ".....#ooo##o#...",
+    "..##.#oooooo#...",
+    ".#oo#oooooo#....",
+    ".#ooooooooo#....",
+    "..##oooooo#.....",
+    "....#oooo#......",
+    "...#.#oo#.......",
+    "..#o#.##........",
+    ".#oo#...........",
+    ".###............",
+    "................",
+  ],
+  alert: [
+    ".......##.......",
+    "......#oo#......",
+    "......#oo#......",
+    ".....#oooo#.....",
+    ".....#o##o#.....",
+    "....#oo##oo#....",
+    "....#oo##oo#....",
+    "...#ooo##ooo#...",
+    "...#ooo##ooo#...",
+    "..#oooo##oooo#..",
+    "..#oooooooooo#..",
+    ".#oooooo##oooo#.",
+    ".#oooooo##oooo#.",
+    "#oooooooooooooo#",
+    "################",
+    "................",
+  ],
+  heart: [
+    "................",
+    "..####....####..",
+    ".#oooo#..#oooo#.",
+    "#oo##oo##oooooo#",
+    "#o#oooooooooooo#",
+    "#oooooooooooooo#",
+    "#oooooooooooooo#",
+    ".#oooooooooooo#.",
+    "..#oooooooooo#..",
+    "...#oooooooo#...",
+    "....#oooooo#....",
+    ".....#oooo#.....",
+    "......#oo#......",
+    ".......##.......",
+    "................",
+    "................",
+  ],
+  branch: [
+    "................",
+    "..###.......###.",
+    ".#ooo#.....#ooo#",
+    ".#ooo#.....#ooo#",
+    "..###.......###.",
+    "...#.........#..",
+    "...#.........#..",
+    "...#........#...",
+    "...#......##....",
+    "...#....##......",
+    "...#..##........",
+    "...###..........",
+    "..###...........",
+    ".#ooo#..........",
+    ".#ooo#..........",
+    "..###...........",
+  ],
+  check: [
+    "................",
+    "################",
+    "#oooooooooooooo#",
+    "#oooooooooooo#o#",
+    "#ooooooooooo##o#",
+    "#oooooooooo##oo#",
+    "#ooooooooo##ooo#",
+    "#o#oooooo##oooo#",
+    "#o##oooo##ooooo#",
+    "#oo##oo##oooooo#",
+    "#ooo####ooooooo#",
+    "#oooo##oooooooo#",
+    "#oooooooooooooo#",
+    "#oooooooooooooo#",
+    "################",
+    "................",
+  ],
+  robot: [
+    ".......##.......",
+    ".......##.......",
+    "...##########...",
+    "..#oooooooooo#..",
+    "..#oo##oo##oo#..",
+    "#.#oo##oo##oo#.#",
+    "#.#oooooooooo#.#",
+    "#.#ooo####ooo#.#",
+    "..#oooooooooo#..",
+    "...##########...",
+    ".....#oooo#.....",
+    "...##########...",
+    "..#oooooooooo#..",
+    "..#oo#oooo#oo#..",
+    "..#oooooooooo#..",
+    "...##########...",
+  ],
+  gear: [
+    "................",
+    "......####......",
+    "..##..#oo#..##..",
+    "..#o###oo###o#..",
+    "...#oooooooo#...",
+    "..#ooo####ooo#..",
+    "###oo#....#oo###",
+    "#ooo#......#ooo#",
+    "#ooo#......#ooo#",
+    "###oo#....#oo###",
+    "..#ooo####ooo#..",
+    "...#oooooooo#...",
+    "..#o###oo###o#..",
+    "..##..#oo#..##..",
+    "......####......",
+    "................",
+  ],
+  sparkle: [
+    "................",
+    ".......#........",
+    ".......#........",
+    "......#o#.......",
+    "......#o#.......",
+    "....##ooo##.....",
+    "##########o#####",
+    "....##ooo##.....",
+    "......#o#.......",
+    "......#o#.....#.",
+    ".......#.....###",
+    ".......#......#.",
+    "................",
+    "..#.............",
+    ".###............",
+    "..#.............",
+  ],
+} as const;
+
+export type PixelIconName = keyof typeof ICONS;
+
+export function PixelIcon({
+  name,
+  className = "h-6 w-6",
+  ...props
+}: { name: PixelIconName } & SVGProps<SVGSVGElement>) {
+  const rows = ICONS[name];
+  const ink: string[] = [];
+  const paper: string[] = [];
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] === "#") ink.push(`M${x} ${y}h1v1h-1z`);
+      else if (row[x] === "o") paper.push(`M${x} ${y}h1v1h-1z`);
+    }
+  });
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+      className={className}
+      {...props}
+    >
+      <path d={paper.join("")} fill="var(--color-panel)" />
+      <path d={ink.join("")} fill="currentColor" />
+    </svg>
+  );
+}
