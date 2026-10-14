@@ -2,7 +2,7 @@ import { STATUS_TONE } from "@/components/ui";
 import { label, LIFECYCLE } from "@/lib/format";
 import type { IncidentStatus } from "@/types/api";
 
-const CURRENT_BAR = { ok: "bg-emerald-400", warn: "bg-amber-400 animate-pulse", critical: "bg-red-500 animate-pulse", info: "bg-sky-400 animate-pulse", neutral: "bg-zinc-500" };
+const CURRENT_BAR = { ok: "bg-[#28c840]", warn: "bg-[#febc2e]", critical: "bg-[#ff5f57]", info: "bg-[#0a84ff]", neutral: "bg-zinc-500" };
 
 /** The backend lifecycle as a segmented progress bar. FAILED/ESCALATED are shown as reported. */
 export function LifecycleStepper({ status }: { status: IncidentStatus }) {

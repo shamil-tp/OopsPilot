@@ -3,14 +3,14 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { label } from "@/lib/format";
 import type { EvidenceItem, IncidentStatus, RiskLevel, ServiceStatus, Severity } from "@/types/api";
 
-/** Semantic tones. Color always accompanies text, never replaces it. */
+/** Semantic tones. Color always accompanies text, never replaces it; dots reuse the macOS window-control colors. */
 export type Tone = "ok" | "warn" | "critical" | "info" | "neutral";
 
 const DOT: Record<Tone, string> = {
-  ok: "bg-emerald-400 shadow-[0_0_6px_rgb(52_211_153/0.8)]",
-  warn: "bg-amber-400 shadow-[0_0_6px_rgb(251_191_36/0.8)]",
-  critical: "bg-red-500 shadow-[0_0_6px_rgb(239_68_68/0.9)]",
-  info: "bg-sky-400 shadow-[0_0_6px_rgb(56_189_248/0.8)]",
+  ok: "bg-[#28c840]",
+  warn: "bg-[#febc2e]",
+  critical: "bg-[#ff5f57]",
+  info: "bg-[#0a84ff]",
   neutral: "bg-zinc-500",
 };
 
@@ -23,7 +23,7 @@ export const TEXT: Record<Tone, string> = {
 };
 
 export function Dot({ tone, className = "" }: { tone: Tone; className?: string }) {
-  return <span aria-hidden className={`inline-block h-2 w-2 shrink-0 ${DOT[tone]} ${className}`} />;
+  return <span aria-hidden className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${DOT[tone]} ${className}`} />;
 }
 
 /** Dot + text, e.g. "● Investigating". */
